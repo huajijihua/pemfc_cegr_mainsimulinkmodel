@@ -419,8 +419,22 @@ metadata = struct( ...
 end
 
 function value = coldTopologyHash(model)
+% Checksum generation does not support Simscape logging. Temporarily disable
+% logging for this metadata-only call, then restore the exact model state.
+originalLogType = get_param(model, 'SimscapeLogType');
+wasDirty = strcmp(get_param(model, 'Dirty'), 'on');
+set_param(model, 'SimscapeLogType', 'none');
+cleanup = onCleanup(@() restoreChecksumModelState(model, ...
+    originalLogType, wasDirty));
 checksum = Simulink.BlockDiagram.getChecksum(model);
 value = strjoin(string(dec2hex(uint32(checksum), 8)), '-');
+end
+
+function restoreChecksumModelState(model, logType, wasDirty)
+set_param(model, 'SimscapeLogType', logType);
+if ~wasDirty
+    set_param(model, 'Dirty', 'off');
+end
 end
 
 function state = coldSupplyBoundaryState(model)

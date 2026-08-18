@@ -30,7 +30,9 @@ exhaustMdot = magnitudeTimeseries(outputTimeseries(out, logsout, ...
     'routeA_exhaust_mdot', 'routeA_exhaust_mdot_ts'));
 outletYi = loggedTimeseries(logsout, 'routeA_yi_outlet');
 stackCurrent = loggedTimeseries(logsout, 'routeA_stack_current_A');
-speciesMdot = out.get('routeA_mdot_species_ca_in_ts');
+speciesMdot = normalizeOutputSignal( ...
+    out.get('routeA_mdot_species_ca_in_ts'), ...
+    'routeA_mdot_species_ca_in_ts');
 if numel(stackCurrent.Time) < 2
     simlog = out.get(get_param(model, 'SimscapeLogName'));
     mea = routeA_simscape_log_mea(simlog);
@@ -156,11 +158,27 @@ function signal = outputTimeseries(out, logsout, logName, outputName)
 if datasetHasElement(logsout, logName)
     element = logsout.get(logName);
     if ~isempty(element) && ~isempty(element.Values)
-        signal = element.Values;
+        signal = normalizeOutputSignal(element.Values, outputName);
         return;
     end
 end
-signal = out.get(outputName);
+signal = normalizeOutputSignal(out.get(outputName), outputName);
+end
+
+function signal = normalizeOutputSignal(raw, outputName)
+% Normalize To Workspace outputs without changing the gas-closure contract.
+if isa(raw, 'timeseries')
+    signal = raw;
+    return;
+end
+if isstruct(raw) && isfield(raw, 'time') && isfield(raw, 'signals') && ...
+        isstruct(raw.signals) && isfield(raw.signals, 'values')
+    signal = timeseries(raw.signals.values, raw.time);
+    return;
+end
+error('RouteA:GasClosureOutputFormat', ...
+    'The output signal %s is neither a timeseries nor Structure With Time.', ...
+    outputName);
 end
 
 function present = datasetHasElement(dataset, name)

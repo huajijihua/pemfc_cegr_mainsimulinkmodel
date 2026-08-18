@@ -21,14 +21,9 @@ try
     specs = { ...
         'compressor_inlet_mixer', paths.compressorInletMixer, 'mdot_cond'; ...
         'compressor_volume', paths.compressorVolume, 'mdot_cond'; ...
-        'cathode_humidifier_pipe', ...
-            [paths.cathodeHumidifier '/Pipe (FC)'], 'mdot_c'; ...
         'cathode_gas', [paths.cathodeGas '/Cathode'], 'mdot_cond'; ...
         'cathode_outlet_chamber', paths.outletChamber, 'mdot_cond'; ...
         'egr_pipe', paths.egrPipe, 'mdot_c'; ...
-        'membrane_humidifier_wet_L2', ...
-            [model '/Cathode_Exhaust_Backpressure_Water/' ...
-            'MembraneHumidifierWet_L2_FC'], 'mdot_c'; ...
         'cathode_exhaust_pipe', ...
             [paths.cathodeExhaustBlock '/Pipe (N Gas)1'], 'mdot_c'};
 
@@ -39,12 +34,8 @@ try
         item.condensationQuantity = string(specs{idx, 3});
         node = simscape.logging.findNode(simlog, char(item.path));
         if isempty(node) || ~isprop(node, char(item.condensationQuantity))
-            if item.name == "membrane_humidifier_wet_L2"
-                item.status = "not_applicable_L2_no_storage";
-            else
-                item.status = "unavailable";
-            end
-            water.nodes(end + 1) = item; %#ok<AGROW>
+            item.status = "unavailable";
+            water.nodes(end + 1) = item;
             continue;
         end
 
@@ -52,11 +43,10 @@ try
             char(item.condensationQuantity), 'kg/s', window);
         item.saturation = saturationStats(node, window);
         item.status = "collected";
-        water.nodes(end + 1) = item; %#ok<AGROW>
+        water.nodes(end + 1) = item;
     end
 
-    collected = [water.nodes.status] == "collected" | ...
-        [water.nodes.status] == "not_applicable_L2_no_storage";
+    collected = [water.nodes.status] == "collected";
     if all(collected)
         water.status = "collected";
     elseif any(collected)

@@ -1,13 +1,13 @@
 # Route A 阴极 cEGR 聚焦模型边界与实施契约
 
-日期：2026-08-14
-状态：结构副本、正式 runner、参数桥接、I/P/V 控制和性能分析契约已完成首轮收口；当前实现为 `Passive / ExternalHumidifier / CathodeOutletBranchFlowProxy / CompressorInlet`，其中 `ExternalHumidifier` 目前仅表示单侧 L2 注水接口，不等价于膜加湿器；目标架构为 `Passive / ExternalMembraneHumidifier / PostSeparatorGas / CompressorInlet`；两种阀门被动式配置的总裁决见 `RouteA_cEGR_PEMFC_两种阀门被动式架构与控制边界裁决_v01.md`；不构成工程方案验证。
+日期：2026-08-17
+状态：V-SH 被选为当前唯一主动聚焦主线；结构副本、正式 runner、参数桥接、I/P/V 控制和性能分析契约已完成首轮收口，V-SH-W0 的模型可读化及结构/编译/运行/日志 warning 清零已完成；W1 case/边界契约、240 kW BOP 半定量标定和 CEGR 工程研究尚未完成。当前实现仍为 `Passive / SelfHumidifying / CathodeOutletBranchFlowProxy / CompressorInlet`，不构成工程方案验证。V-SH 专项约束和 W0-W6 执行计划见 `RouteA_cEGR_PEMFC_V-SH工程化建模约束与执行计划_v01.md`。
 源模型：`04_Simulink物理网络模型/01_模型/RouteA_GasMixture_Derived/PEMFuelCellSystem_GasMixture_cEGR_RouteA_v01.slx`  
 聚焦模型：`04_Simulink物理网络模型/01_模型/RouteA_Cathode_cEGR_Focused/PEMFuelCellSystem_Cathode_cEGR_Focused_v01.slx`
 
 ## 1. 研究目的
 
-聚焦模型目标用于研究当前被动式、普通外部加湿电堆、分离后气相回流至空压机入口的完整阴极气路、cEGR、阴极背压、气体温度、气相冷凝和电堆性能之间的关系；当前实现仍是出口分支流阻代理。它不是当前完整系统模型的替代品，也不用于表达主动泵方案。
+V-SH 聚焦模型用于研究被动阀门、自增湿电堆、阴极气路、cEGR、阴极背压、气体温度、气相冷凝和电堆性能之间的关系；当前实现仍是出口分支流阻代理，必须在进入工程结论前确认或修复其能力缺口。它不是当前完整系统模型的替代品，也不用于表达主动泵方案。
 
 ## 2. 保留边界
 
@@ -18,20 +18,20 @@
 - 阳极气体通道入口采用上游氢气 Reservoir + Mass Flow Rate Source，出口采用最小 Pipe + 定压 Reservoir，并保留 Gas Mixture Properties。
 - 热管理 BOP 移除；MEA 热端口通过 Heat Flow Rate Sensor 接入电堆固定温度节点，恒温源默认 `80 degC`。
 
-## 3. 固定边界
+## 3. 默认参考边界与可变输入
 
 | 量 | 默认值 | 模型写入点 |
 |---|---:|---|
 | 堆固定温度 | 80 degC | `focused_stack_temperature_C` |
 | 阳极供氢储库压力 | 0.3 MPa(abs) | `focused_anode_feed_p_MPa_abs` |
-| 阳极入口质量流量 | 0.001 kg/s 假设值 | `focused_anode_inlet_mdot_kg_s` |
+| 阳极入口质量流量 | 0.001 kg/s 参考值 | `focused_anode_inlet_mdot_kg_s` |
 | 阳极出口压力 | 0.101325 MPa(abs) | `focused_anode_outlet_p_MPa_abs` |
 | 阳极边界温度 | 20 degC | `focused_anode_boundary_T_C` |
 | 氢气摩尔分数 | 0.9997 | `focused_anode_yH2` |
 | 阳极 Pipe 长度 | 1 m | `focused_anode_pipe_length` |
 | 阳极 Pipe 面积 | pi*0.02^2/4 m^2 | `focused_anode_pipe_area` |
 
-所有固定边界仍通过 `SimulationInput` 写入；气路内部温度、压力、组分和冷凝量不由后处理常数替代。
+表中数值只是默认参考值。阳极压力、温度、湿度、组分、流量和堆温必须按确定的研究 case 通过 `SimulationInput` 写入；可采用电流/计量比派生流量或外部案例直接流量，但两种模式不得竞争写入。气路内部温度、压力、组分和冷凝量不由后处理常数替代。
 
 ## 4. 结果边界
 
@@ -39,10 +39,11 @@
 
 ## 5. 实施顺序
 
-1. 轻量模型与完整模型在相同冷态输入下做结构和行为对照。
-2. 固化 I/P/V 分模式的聚焦 runner 和结果契约。
-3. 单独修复冷凝位置、氧分压、分流点回流率、空压机入口混合比例和其他已识别缺陷。
-4. 修复后的结果重新与未修复副本和完整模型进行对照。
+1. V-SH-W0 已完成：清零结构、编译、运行和日志 warning，并完成正式 120 s W0 cold smoke 回归。
+2. 后续执行 V-SH-W1，固化可变 case 输入、参数来源和唯一写入点。
+3. 执行 V-SH-W2，完成 606 片、380 cm² 电堆和阴极 BOP 半定量标定。
+4. 执行 V-SH-W3/W4/W5，完成 CEGR 静态能力、气相冷凝风险和阀门动态边界。
+5. W0-W5 完成后再与完整系统做必要的接口和边界对照；不得用完整系统替代 V-SH 的聚焦证据。
 
 不得把一次结构复制、smoke 或数值完成表述为 cEGR 工程方案已验证。
 

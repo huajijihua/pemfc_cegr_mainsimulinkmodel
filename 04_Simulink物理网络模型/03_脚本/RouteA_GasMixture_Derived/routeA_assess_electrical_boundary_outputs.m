@@ -36,7 +36,9 @@ rhOut = waterRelativeHumidity(outputTimeseries(out, logsout, ...
     'routeA_RH_ca_out', 'routeA_RH_ca_out_ts'));
 waterSeparator = outputTimeseries(out, logsout, 'routeA_m_water_sep', ...
     'routeA_m_water_sep_ts');
-speciesMdot = out.get('routeA_mdot_species_ca_in_ts');
+speciesMdot = normalizeOutputSignal( ...
+    out.get('routeA_mdot_species_ca_in_ts'), ...
+    'routeA_mdot_species_ca_in_ts');
 [species, speciesTotal, speciesMassFraction] = inletSpeciesMetrics(speciesMdot);
 inletTotalMdot = timeseries(speciesTotal, speciesMdot.Time);
 inletO2MassFraction = timeseries(speciesMassFraction(:, 2), ...
@@ -557,11 +559,27 @@ function signal = outputTimeseries(out, logsout, logName, outputName)
 if datasetHasElement(logsout, logName)
     element = logsout.get(logName);
     if ~isempty(element) && ~isempty(element.Values)
-        signal = element.Values;
+        signal = normalizeOutputSignal(element.Values, outputName);
         return;
     end
 end
-signal = out.get(outputName);
+signal = normalizeOutputSignal(out.get(outputName), outputName);
+end
+
+function signal = normalizeOutputSignal(raw, outputName)
+% Normalize To Workspace outputs without changing the result contract.
+if isa(raw, 'timeseries')
+    signal = raw;
+    return;
+end
+if isstruct(raw) && isfield(raw, 'time') && isfield(raw, 'signals') && ...
+        isstruct(raw.signals) && isfield(raw.signals, 'values')
+    signal = timeseries(raw.signals.values, raw.time);
+    return;
+end
+error('RouteA:ElectricalBoundaryOutputFormat', ...
+    'The output signal %s is neither a timeseries nor Structure With Time.', ...
+    outputName);
 end
 
 function present = datasetHasElement(dataset, name)

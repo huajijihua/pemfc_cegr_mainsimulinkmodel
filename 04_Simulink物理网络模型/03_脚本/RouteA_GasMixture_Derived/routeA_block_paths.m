@@ -5,15 +5,28 @@ function paths = routeA_block_paths(model)
 paths = struct();
 paths.model = model;
 
-paths.stack = [model '/Stack_Core'];
-paths.cathodeAir = [model '/Cathode_Air_cEGR_BOP'];
-paths.cathodeExhaust = [model '/Cathode_Exhaust_Backpressure_Water'];
-paths.anode = [model '/Anode_Hydrogen_BOP'];
-paths.thermal = [model '/Thermal_Management_BOP'];
-paths.control = [model '/System_Control_Observability'];
-paths.fcu = [paths.control '/FCU_BoP_Control'];
-paths.measurements = [paths.control '/Measurements'];
-paths.electricalLoad = [paths.control '/Electrical Load'];
+isFocused = contains(string(model), "Cathode_cEGR");
+if isFocused
+    paths.stack = [model '/PEMFC_Stack_Core'];
+    paths.cathodeAir = [model '/Cathode_Air_Supply_and_cEGR'];
+    paths.cathodeExhaust = [model '/Cathode_Exhaust_and_Backpressure'];
+    paths.anode = [model '/Simplified_Anode_Boundary'];
+    paths.thermal = [model '/Fixed_Stack_Temperature_Boundary'];
+    paths.control = [model '/Control_and_Result_Observability'];
+    paths.fcu = [paths.control '/Cathode_cEGR_Control'];
+    paths.measurements = [paths.control '/Stack_Performance_Measurements'];
+    paths.electricalLoad = [paths.control '/Electrical_Load_Boundary'];
+else
+    paths.stack = [model '/Stack_Core'];
+    paths.cathodeAir = [model '/Cathode_Air_cEGR_BOP'];
+    paths.cathodeExhaust = [model '/Cathode_Exhaust_Backpressure_Water'];
+    paths.anode = [model '/Anode_Hydrogen_BOP'];
+    paths.thermal = [model '/Thermal_Management_BOP'];
+    paths.control = [model '/System_Control_Observability'];
+    paths.fcu = [paths.control '/FCU_BoP_Control'];
+    paths.measurements = [paths.control '/Measurements'];
+    paths.electricalLoad = [paths.control '/Electrical Load'];
+end
 paths.currentDemand = [paths.electricalLoad '/Inputs/Current Demand'];
 paths.currentCommand = [paths.currentDemand '/Current Demand'];
 paths.powerDemand = [paths.electricalLoad '/Inputs/Power Demand'];
@@ -33,14 +46,27 @@ paths.currentReferenceVariable = 'drive_cycle_current';
 paths.powerReferenceVariable = 'drive_cycle_power';
 paths.referenceTimeVariable = 'drive_cycle_time';
 
-paths.anodeGas = [paths.stack '/Anode Gas Channels'];
-paths.cathodeGas = [paths.stack '/Cathode Gas Channels'];
-paths.outletChamber = [paths.stack '/CathodeOutletChamber'];
-paths.outletResistance = [paths.stack '/CathodeOutletResistance'];
-paths.outletChamberInsulator = [paths.stack ...
-    '/CathodeOutletChamberInsulator'];
+if isFocused
+    paths.anodeGas = [paths.stack '/Anode_Gas_Channels'];
+    paths.cathodeGas = [paths.stack '/Cathode_Gas_Channels'];
+    paths.outletChamber = [paths.stack '/Cathode_Outlet_Chamber_FC'];
+    paths.outletResistance = [paths.stack '/Cathode_Outlet_Resistance_FC'];
+    paths.outletChamberInsulator = [paths.stack ...
+        '/Cathode_Outlet_Chamber_Insulator'];
+else
+    paths.anodeGas = [paths.stack '/Anode Gas Channels'];
+    paths.cathodeGas = [paths.stack '/Cathode Gas Channels'];
+    paths.outletChamber = [paths.stack '/CathodeOutletChamber'];
+    paths.outletResistance = [paths.stack '/CathodeOutletResistance'];
+    paths.outletChamberInsulator = [paths.stack ...
+        '/CathodeOutletChamberInsulator'];
+end
 
-paths.oxygen = [paths.cathodeAir '/Oxygen Source'];
+if isFocused
+    paths.oxygen = [paths.cathodeAir '/Fresh_Air_Compression_Mixing'];
+else
+    paths.oxygen = [paths.cathodeAir '/Oxygen Source'];
+end
 paths.compressorControl = [paths.oxygen '/Compressor Control'];
 paths.airIntake = [paths.oxygen '/Air Intake'];
 paths.compressorInletMixer = [paths.oxygen '/CompressorInletMixer'];
@@ -75,27 +101,47 @@ paths.cathodeHumidifierConverter = [paths.cathodeHumidifier ...
 paths.cathodeRHInWorkspace = [paths.cathodeHumidifier ...
     '/RH_ca_in_ToWorkspace'];
 
-paths.egrValve = [paths.cathodeAir '/EGRValveRestriction'];
+if isFocused
+    paths.egrValve = [paths.cathodeAir '/cEGR_Return_Valve'];
+    paths.egrPipe = [paths.cathodeAir '/cEGR_Return_Pipe_FC'];
+    paths.egrValveUpSensor = [paths.cathodeAir ...
+        '/cEGR_Valve_Upstream_PT_Sensor'];
+    paths.egrValveDownSensor = [paths.cathodeAir ...
+        '/cEGR_Valve_Downstream_PT_Sensor'];
+else
+    paths.egrValve = [paths.cathodeAir '/EGRValveRestriction'];
+    paths.egrPipe = [paths.cathodeAir '/EGRPipe'];
+    paths.egrValveUpSensor = [paths.cathodeAir '/EGRValveUpPTSensor'];
+    paths.egrValveDownSensor = [paths.cathodeAir '/EGRValveDownPTSensor'];
+end
 paths.egrValveClosed = [paths.egrValve '/Closed'];
 paths.egrValveOpen = [paths.egrValve '/Open'];
-paths.egrPipe = [paths.cathodeAir '/EGRPipe'];
-paths.egrValveUpSensor = [paths.cathodeAir '/EGRValveUpPTSensor'];
 paths.egrValveUpReference = [paths.cathodeAir '/EGRValveUpPTRef'];
-paths.egrValveDownSensor = [paths.cathodeAir '/EGRValveDownPTSensor'];
 paths.egrValveDownReference = [paths.cathodeAir '/EGRValveDownPTRef'];
 paths.egrValveUpPConverter = [paths.cathodeAir '/EGRValveUpP_Converter'];
 paths.egrValveDownPConverter = [paths.cathodeAir ...
     '/EGRValveDownP_Converter'];
 
-paths.cathodeExhaustBlock = [paths.cathodeExhaust '/Cathode Exhaust'];
-paths.egrMassFlowSensor = [paths.cathodeExhaust '/EGRMassFlowSensor'];
+if isFocused
+    paths.cathodeExhaustBlock = [paths.cathodeExhaust ...
+        '/Exhaust_Backpressure_Boundary'];
+    paths.egrMassFlowSensor = [paths.cathodeExhaust ...
+        '/cEGR_Return_Mass_Flow_Sensor'];
+    paths.exhaustMassFlowSensor = [paths.cathodeExhaust ...
+        '/Exhaust_Mass_Flow_Sensor'];
+    paths.outletHumiditySensor = [paths.cathodeExhaust ...
+        '/Cathode_Outlet_Humidity_Sensor'];
+else
+    paths.cathodeExhaustBlock = [paths.cathodeExhaust '/Cathode Exhaust'];
+    paths.egrMassFlowSensor = [paths.cathodeExhaust '/EGRMassFlowSensor'];
+    paths.exhaustMassFlowSensor = [paths.cathodeExhaust ...
+        '/ExhaustMassFlowSensor'];
+    paths.outletHumiditySensor = [paths.cathodeExhaust ...
+        '/OutletHumiditySensor'];
+end
 paths.egrMassFlowConverter = [paths.cathodeExhaust '/EGR_mdot_Converter'];
-paths.exhaustMassFlowSensor = [paths.cathodeExhaust ...
-    '/ExhaustMassFlowSensor'];
 paths.exhaustMassFlowConverter = [paths.cathodeExhaust ...
     '/Exhaust_mdot_Converter'];
-paths.outletHumiditySensor = [paths.cathodeExhaust ...
-    '/OutletHumiditySensor'];
 paths.outletPConverter = [paths.cathodeExhaust '/OutletP_Converter'];
 paths.outletRHConverter = [paths.cathodeExhaust '/OutletRH_Converter'];
 paths.outletTConverter = [paths.cathodeExhaust '/OutletT_Converter'];
@@ -114,10 +160,15 @@ paths.outletCompositionDiagnostics = [paths.control ...
 paths.outletTemperatureDiagnostics = [paths.control ...
     '/RouteA_CathodeOutlet_PT'];
 
-paths.hydrogenSource = [paths.anode '/Hydrogen Source'];
+if isFocused
+    paths.hydrogenSource = [paths.anode '/Hydrogen_Feed_Reservoir_FC'];
+    paths.anodeExhaust = [paths.anode '/Anode_Outlet_Reservoir_FC'];
+else
+    paths.hydrogenSource = [paths.anode '/Hydrogen Source'];
+    paths.anodeExhaust = [paths.anode '/Anode Exhaust'];
+end
 paths.anodeInletPressureSetpoint = [paths.hydrogenSource '/Stack Pressure'];
 paths.anodeWaterSeparator = [paths.anode '/AnodeWaterSeparator_FC'];
-paths.anodeExhaust = [paths.anode '/Anode Exhaust'];
 paths.recirculation = [paths.anode '/Recirculation'];
 paths.anodeRecirculationControl = [paths.recirculation '/Feedforward Control'];
 paths.anodeRecirculationBaseCommand = [paths.anodeRecirculationControl '/Constant'];
