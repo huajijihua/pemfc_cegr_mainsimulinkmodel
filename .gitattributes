@@ -9,7 +9,9 @@
 *.pdf binary
 *.docx binary
 *.xlsx binary
-*.mat filter=lfs diff=lfs merge=lfs -text
+04_Simulink物理网络模型/02_结果/RouteA_Cathode_cEGR_Focused/RouteA_Focused_External240kW_SelfHumidifying_*_20260818.mat filter=lfs diff=lfs merge=lfs -text
+04_Simulink物理网络模型/02_结果/RouteA_Cathode_cEGR_Focused/RouteA_Focused_External240kW_VSH_PassiveCEGR_*_4J_600s_v02.mat filter=lfs diff=lfs merge=lfs -text
+04_Simulink物理网络模型/02_结果/RouteA_Cathode_cEGR_Focused/RouteA_Focused_External240kW_VSH_ValvePassiveCEGRScreen_j0p1_r05_600s_20260818.mat filter=lfs diff=lfs merge=lfs -text
 *.pptx binary
 *.slx binary
 *.mph binary
