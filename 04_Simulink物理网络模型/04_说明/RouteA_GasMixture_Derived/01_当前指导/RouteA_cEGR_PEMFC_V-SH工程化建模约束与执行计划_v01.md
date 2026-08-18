@@ -130,12 +130,12 @@ V-SH 完成标准要求以下三类 warning 均为零：
 
 1. 正向回流、压力、空压机有效工作区和 O2 供应等可行性约束；
 2. 公共背压控制；
-3. `r_split` 目标跟踪；
+3. `R_EGR=m_return/m_fresh` 目标跟踪；
 4. 在可行域内降低冷凝风险并评估气路代价。
 
-从 `r_split=0` 开始扫描 `0、0.05、0.10、0.20、0.30`，再递增至阀面积饱和、回流方向失效、O2/压力约束失败、冷凝风险超限或数值无法稳定。最大 CEGR 是多约束运行包络，不是单一比例。
+统一研究量为压缩机入口 `R_EGR=m_return/m_fresh`，阀控制器的混合基输入必须显式换算为 `x_EGR=m_return/m_total=R_EGR/(1+R_EGR)`；`r_split` 仅作出口分支的独立观测。先按两条互斥流量策略扫描：总流量不变时每负载从 `0` 到 `OER_ref-1` 的归一化边界；新鲜空气不变时扫 `R_EGR=[0,0.1,0.5,1,2,4,8]`。随后再按阀面积饱和、回流方向失效、实际入堆 O2/压力约束失败、冷凝风险超限或数值无法稳定识别多约束运行包络。
 
-第一轮矩阵采用 5 个主负荷点 `0.1、0.4、0.9、1.2、1.9 A/cm²`、5 个 CEGR 点和 `80°C` 额定温度；温度、湿度、压力和空气流量扰动只对出现约束边界的 case 扩展。
+首轮固定为推荐工况的 `j=[0.1,0.2,0.4,1.0] A/cm²`，对应 `OER_ref=[5.0,3.6,2.4,1.8]`；阴极背压按推荐表的表压加环境绝压，气路/固定堆温按同表写入既有边界。温度、湿度、压力和空气流量扰动只对出现约束边界的 case 扩展。
 
 必须输出：
 
@@ -169,6 +169,8 @@ V-SH 只采用现有饱和蒸汽压、组分和质量守恒气相相变功能，
 
 - 顶层已收敛为 8 个语义功能容器；参数桥已收敛为 V-SH 实际 24 个写点，V-SH 不再写入引射器变量；
 - 代表性正式 cold smoke 为 `self_humidifying`、Current 5 A、cEGR target/profile 0、120 s、尾窗 `[90,120]`、`steadyWindowDuration_s=30`；`SimulationInput -> sim -> assess` 返回 `SIM_COMPLETED=1`、`CASE_PASSED=1`、`STUDY_PASSED=1`、runtime warning diagnostics 0；
+- 外部 240 kW W1/W2 使用 `240kw电堆数据.txt` 的 19 个电气/流量点与 5 个绝对压力/气温锚点，并用推荐工况表的冷却液均值作为固定堆温边界；无回流 19 点基线由 18 个既有成功 case 和 j=1.7 A/cm² 定向回归汇总，11 点电压验证 RMSE 为 14.728138 mV、五点入口压力 RMSE 为 5.921663 kPa。W3 首个 `0.1 A/cm² / target m_cegr/m_comp_inlet=0.05` 600 s 点通过，实际 `r_split` 仅作独立支路代理指标；cEGR 能力包络尚未完成；
+- 对外部 240 kW 的 `cold_start_only` cEGR case，case factory 必须把非零目标设为与新鲜空气相同建立期的 `0 -> targetRatio` 渐变。该规则来自已复现的冷态突跳阻塞修复；它是数值输入合同，不是阀门或回流物理性能结论；
 - Simulink/Simscape update、compile、runtime 和正式结果链均无 warning；
 - `Cathode_Air_Supply_and_cEGR` 已用官方 `Pipe (FC)` 和 `Pressure and Temperature Sensor (FC)` 源码确认端口语义：回流管 `MIn` 显式固定为无侧源物种流，`TIn` 显式给出零侧源的参考温度；阀前/后 `T` 均接入具名的 K 温度诊断。该 owner 的 13 条警告清零，并经 120 s W0 回归确认新增诊断可记录；
 - `Cathode_Exhaust_and_Backpressure` 已用官方 `CompHumSensor` 和 `MassEnergyFlowSensor` 源码确认组分、湿度、能量流与物种质量流端口语义；所有测量输出已接入独立具名诊断消费者，排气边界管的无侧源输入已显式化。审计中还发现阴极腔 B 端的既有官方 `Cap (FC)` 内部实际断线，已恢复其到跨层物理端口的连接。该 scope 现为 structural healthy，并经 120 s W0 回归确认新增 6 组记录可用；
@@ -190,9 +192,11 @@ V-SH 只采用现有饱和蒸汽压、组分和质量守恒气相相变功能，
 
 ### V-SH-W3：被动 CEGR 静态能力包络
 
-- 执行第一轮负荷 × `r_split` 矩阵；
+- 分两步执行第一轮负荷 × `R_EGR` 矩阵：先总流量不变，再新鲜空气不变；
 - 记录阀面积、阀压差、回流/排放流量、O2、压力和堆功率；
 - 出口：能力图、约束边界和失败分类。
+
+当前外部 240 kW 的 W3 输入已由 `routeA_focused_external240kw_cegr_matrix_case_factory` 生成并完成正式研究运行：两个 4-worker 并行 600 s cold-start 批次共 52 case。总流量不变批次为 24 case：每一负载扫 `R_EGR=(OER_ref-1)*[0,0.10,0.25,0.50,0.75,1.00]`，保持参考 OER 对应的压缩机总质量流；新鲜空气不变批次为 28 case：每一负载扫 `[0,0.1,0.5,1,2,4,8]`，使用 V-SH mode 4 对 `m_fresh=max(0,|m_total|-|m_cEGR|)` 反馈并随回流提高总流量。启动期有两个 case 因 mode-4 新增的 `Abs` 测量块产生连续零交叉而停止；参照既有同义块，将 `A98_TotalMdot_Abs` 与 `A98_cEGRReturnMdot_Abs` 的 `ZeroCross` 设为 `off`，只补算两个失败 case 后回填正式 MAT，最终 52/52 数值完成，修复 case 的 Diagnostic Viewer 为 0 error / 0 warning。实际入堆 OER 的判据为 `<1` 不可取、`1–1.2` 风险、`>1.2` 可行；目标/实际回流均按 `R_EGR` 比较，同时报告控制器混合基比与 `r_split`；压缩机入口混合器、阴极气体及回流管的气相饱和/冷凝状态进入审计表。W3 本轮结果为模型范围内的气相筛选，而非阀门额定、液水库存、液滴输运或压缩机耐液工程验证；可读交付更新为 `02_结果/RouteA_Cathode_cEGR_Focused/outputs/20260818_vsh_cegr_audit/RouteA_External240kW_VSH_cEGR_技术审计结果_v02.xlsx`。v02 将原“OER 命令”明确为无 cEGR 基准 `OER_ref`，单列总流量不变与新鲜空气不变的流量边界；阀压差及压力链统一以 kPa 报告，并以阀前后实测 `Δp_valve=p_up-p_down`、阀面积分数、实际 `R_EGR`、实际 OER 与气相筛选共同解释回流能力。该工作簿已由本机 Microsoft Excel 无恢复提示地直接打开复核。
 
 ### V-SH-W4：温度/湿度/压力扰动和冷凝风险
 

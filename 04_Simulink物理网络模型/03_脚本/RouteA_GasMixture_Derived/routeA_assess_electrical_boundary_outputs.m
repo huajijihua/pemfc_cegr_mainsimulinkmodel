@@ -47,11 +47,13 @@ inletWaterVaporMdot = timeseries(species(:, 4), speciesMdot.Time);
 lambdaCaIn = inletOxygenStoich(speciesMdot, stackCurrent, context.stackCells);
 egrAtCompressorTime = interpolate(egrMdot.Time, egrMdot.Data, ...
     compMdot.Time);
-freshAirApprox = timeseries(compMdot.Data - egrAtCompressorTime, ...
-    compMdot.Time);
+freshAirApprox = timeseries(max(0, abs(compMdot.Data) - ...
+    abs(egrAtCompressorTime)), compMdot.Time);
 airMdotSetAtCompressorTime = interpolate(airMdotSet.Time, ...
     airMdotSet.Data, compMdot.Time);
 compressorMdotTrackingError = timeseries(compMdot.Data - ...
+    airMdotSetAtCompressorTime, compMdot.Time);
+freshAirMdotTrackingError = timeseries(freshAirApprox.Data - ...
     airMdotSetAtCompressorTime, compMdot.Time);
 pressureDeltaMPa = timeseries((pUp.Data - pDown.Data) * 1e-6, pUp.Time);
 areaFraction = timeseries(area.Data / context.cegrValveMaxArea_m2, area.Time);
@@ -74,6 +76,9 @@ tail.compressorMdot_kg_s = windowStats(compMdot, context.tailWindow_s);
 tail.compressorMdotSet_kg_s = windowStats(airMdotSet, context.tailWindow_s);
 tail.compressorMdotTrackingError_kg_s = windowStats( ...
     compressorMdotTrackingError, context.tailWindow_s);
+tail.freshAirMdotSet_kg_s = windowStats(airMdotSet, context.tailWindow_s);
+tail.freshAirMdotTrackingError_kg_s = windowStats( ...
+    freshAirMdotTrackingError, context.tailWindow_s);
 tail.airControlError_kg_s = windowStats(airControlError, context.tailWindow_s);
 tail.compressorPressure_Pa = windowStats(compP, context.tailWindow_s);
 tail.compressorTemperature_K = windowStats(compT, context.tailWindow_s);
@@ -135,6 +140,12 @@ result.targetError = cegr.tailMeanError;
 result.targetTolerance = cegr.tolerance;
 result.cegrTrackingRequired = cegr.trackingRequired;
 result.targetAirEquivalentOer = context.air.targetOer;
+result.airControlModeId = context.air.modeId;
+if context.air.modeId == 4
+    result.airControlMeasurement = "fresh_air_approx_at_compressor_inlet";
+else
+    result.airControlMeasurement = "total_compressor_inlet_mass_flow";
+end
 result.targetCurrentA = commandTailValue(context, "Current");
 result.targetPower_kW = commandTailValue(context, "Power");
 result.targetVoltage_V = commandTailValue(context, "Voltage");
@@ -167,11 +178,19 @@ result.compressorRpmLookupPassed = ...
     tail.compressorRpm.minimum >= context.compressorRpmLookupBounds(1) - 1e-9 && ...
     tail.compressorRpm.maximum <= context.compressorRpmLookupBounds(2) + 1e-9;
 % Mode 3 is an intentional direct compressor command and bypasses the
-% mass-flow/OER controller. Its flow mismatch is diagnostic only, not a
-% tracking failure. Modes 1 and 2 retain the closed-loop tracking gate.
-result.compressorMdotTrackingPassed = context.air.modeId == 3 || ...
-    tail.compressorMdotTrackingError_kg_s.maximumAbs <= ...
-    max(0.02 * abs(tail.compressorMdotSet_kg_s.mean), 5e-4);
+% mass-flow/OER controller. Mode 4 closes the same controller on the
+% steady mixer-conservation estimate m_fresh=max(0,|m_total|-|m_cEGR|).
+if context.air.modeId == 3
+    result.compressorMdotTrackingPassed = true;
+elseif context.air.modeId == 4
+    result.compressorMdotTrackingPassed = ...
+        tail.freshAirMdotTrackingError_kg_s.maximumAbs <= ...
+        max(0.02 * abs(tail.freshAirMdotSet_kg_s.mean), 5e-4);
+else
+    result.compressorMdotTrackingPassed = ...
+        tail.compressorMdotTrackingError_kg_s.maximumAbs <= ...
+        max(0.02 * abs(tail.compressorMdotSet_kg_s.mean), 5e-4);
+end
 result.boundaryPassed = boundary.passed;
 result.cegrPassed = cegr.passed;
 result.saturationPassed = saturation.passed;

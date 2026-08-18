@@ -1,9 +1,11 @@
 function study = run_routeA_focused_study(studyCfg)
-% Run focused cathode-cEGR cases through one serial formal runner.
+% Run focused cathode-cEGR cases through the formal serial/parallel runner.
 %
 % The runner reuses the shared Route A input adapter and cathode/electrical
 % output assessor, while the model boundary owns the fixed anode and thermal
 % interfaces. Current, Power, and Voltage cases are run as separate calls.
+% Parallel execution uses parsim only after all SimulationInput objects have
+% been prepared on the client; result assessment remains deterministic here.
 
 if nargin < 1 || isempty(studyCfg)
     error('RouteA:FocusedStudyConfig', ...
@@ -32,13 +34,19 @@ end
 caseCount = numel(cfg.cases);
 results = cell(caseCount, 1);
 outputs = cell(caseCount, 1);
+preparedInputs = cell(caseCount, 1);
+preparedContexts = cell(caseCount, 1);
+preparedCases = cell(caseCount, 1);
+preparedAdapters = cell(caseCount, 1);
+preparedBridges = cell(caseCount, 1);
 execution = struct( ...
     'requestedCaseIds', strings(0, 1), ...
     'preparedCaseIds', strings(0, 1), ...
     'executedCaseIds', strings(0, 1), ...
     'completedCaseIds', strings(0, 1), ...
     'failedCaseIds', strings(0, 1), ...
-    'executionMode', "serial", ...
+    'executionMode', cfg.executionMode, ...
+    'parallel', parallelExecutionTemplate(cfg), ...
     'halted', false, ...
     'haltReason', "");
 
@@ -56,24 +64,66 @@ for idx = 1:caseCount
         adapterCfg = rmfield(cfg, ...
             {'retainSimulationOutputs', 'resultFile', 'cases', 'boundaryType', ...
             'architectureId', 'modelId', 'externalCalibrationReference', ...
-            'hydraulicScreenContract'});
+            'hydraulicScreenContract', 'cegrScreenContract', 'executionMode', ...
+            'parallel'});
         [in, context] = routeA_prepare_electrical_boundary_input( ...
             model, modelDir, caseCfg, adapterCfg);
         [in, focusedBridge] = applyFocusedVariables( ...
             in, caseCfg, defaults, model);
         context.focusedCaseAdapter = caseAdapter;
         context.focusedParameterBridge = focusedBridge;
+        preparedInputs{idx} = in;
+        preparedContexts{idx} = context;
+        preparedCases{idx} = caseCfg;
+        preparedAdapters{idx} = caseAdapter;
+        preparedBridges{idx} = focusedBridge;
         execution.preparedCaseIds(end + 1, 1) = caseId;
-        out = sim(in);
-        execution.executedCaseIds(end + 1, 1) = caseId;
+    catch exception
+        result.errorId = string(exception.identifier);
+        result.errorMessage = string(getReport(exception, 'extended', ...
+            'hyperlinks', 'off'));
+        result.failureCategory = "simulation_or_collection_error";
+        execution.failedCaseIds(end + 1, 1) = caseId;
+    end
+    results{idx} = harmonizeResult(result);
+end
+
+runnableIdx = find(~cellfun(@isempty, preparedInputs));
+simulationOutputs = cell(caseCount, 1);
+if ~isempty(runnableIdx)
+    try
+        [simulationOutputs, execution] = runPreparedCases( ...
+            preparedInputs, runnableIdx, cfg, execution);
+    catch exception
+        for idx = runnableIdx(:).'
+            result = failureTemplate();
+            result.caseId = string(preparedCases{idx}.caseId);
+            result.errorId = string(exception.identifier);
+            result.errorMessage = string(getReport(exception, 'extended', ...
+                'hyperlinks', 'off'));
+            result.failureCategory = "batch_execution_error";
+            results{idx} = harmonizeResult(result);
+            execution.failedCaseIds(end + 1, 1) = result.caseId;
+        end
+        runnableIdx = [];
+    end
+end
+
+for idx = runnableIdx(:).'
+    caseCfg = preparedCases{idx};
+    caseId = string(caseCfg.caseId);
+    result = failureTemplate();
+    result.caseId = caseId;
+    try
+        out = simulationOutputs{idx};
         if strlength(string(out.ErrorMessage)) > 0
             error('RouteA:FocusedSimulationError', '%s', out.ErrorMessage);
         end
         result = routeA_focused_assess_outputs( ...
-            out, model, context, caseCfg);
+            out, model, preparedContexts{idx}, caseCfg);
         result.caseCfg = caseCfg;
-        result.caseAdapter = caseAdapter;
-        result.parameterBridge = focusedBridge;
+        result.caseAdapter = preparedAdapters{idx};
+        result.parameterBridge = preparedBridges{idx};
         result.simCompleted = true;
         execution.completedCaseIds(end + 1, 1) = caseId;
         if cfg.retainSimulationOutputs
@@ -143,6 +193,12 @@ if isstruct(cfg.hydraulicScreenContract) && ...
     study.hydraulicScreen = routeA_focused_hydraulic_screen_assessment( ...
         study, cfg.hydraulicScreenContract);
 end
+study.cegrScreenAudit = struct();
+if isstruct(cfg.cegrScreenContract) && ...
+        ~isempty(fieldnames(cfg.cegrScreenContract))
+    study.cegrScreenAudit = routeA_focused_cegr_screen_assessment( ...
+        study, cfg.cegrScreenContract);
+end
 
 if strlength(cfg.resultFile) > 0
     routeA_focused_study = study;
@@ -169,9 +225,16 @@ cfg = struct( ...
     'commandStartOffset_s', 0.5, ...
     'startupRampDuration_s', 60, ...
     'retainSimulationOutputs', false, ...
+    'executionMode', "serial", ...
+    'parallel', struct( ...
+        'poolProfile', "local", ...
+        'workerCount', 4, ...
+        'showProgress', true, ...
+        'useFastRestart', false), ...
     'resultFile', "", ...
     'externalCalibrationReference', struct(), ...
     'hydraulicScreenContract', struct(), ...
+    'cegrScreenContract', struct(), ...
     'cases', struct([]), ...
     'architectureId', "", ...
     'modelId', defaults.modelId);
@@ -234,8 +297,86 @@ cfg.architectureId = architectureIds(1);
 cfg.modelId = lower(string(cfg.modelId));
 cfg.calculationType = lower(string(cfg.calculationType));
 cfg.solver = string(cfg.solver);
+cfg.executionMode = lower(string(cfg.executionMode));
+if ~any(cfg.executionMode == ["serial", "parallel"])
+    error('RouteA:FocusedExecutionMode', ...
+        'executionMode must be serial or parallel.');
+end
+if ~isstruct(cfg.parallel) || ~isscalar(cfg.parallel)
+    error('RouteA:FocusedParallelConfig', ...
+        'parallel must be a scalar configuration struct.');
+end
+requiredParallelFields = {'poolProfile', 'workerCount', 'showProgress', ...
+    'useFastRestart'};
+if ~all(isfield(cfg.parallel, requiredParallelFields))
+    error('RouteA:FocusedParallelConfig', ...
+        'parallel must define poolProfile, workerCount, showProgress, and useFastRestart.');
+end
+cfg.parallel.poolProfile = string(cfg.parallel.poolProfile);
+validateattributes(cfg.parallel.workerCount, {'numeric'}, ...
+    {'scalar', 'integer', 'positive'}, mfilename, 'parallel.workerCount');
+cfg.parallel.showProgress = logical(cfg.parallel.showProgress);
+cfg.parallel.useFastRestart = logical(cfg.parallel.useFastRestart);
 cfg.tailLogicalWindow_s = cfg.tailLogicalWindow_s(:).';
 cfg.resultFile = string(cfg.resultFile);
+end
+
+function [outputs, execution] = runPreparedCases(inputs, runnableIdx, cfg, execution)
+outputs = cell(numel(inputs), 1);
+caseIds = execution.preparedCaseIds;
+if cfg.executionMode == "serial"
+    for runIdx = 1:numel(runnableIdx)
+        idx = runnableIdx(runIdx);
+        outputs{idx} = sim(inputs{idx});
+        execution.executedCaseIds(end + 1, 1) = caseIds(runIdx);
+    end
+    return;
+end
+
+pool = gcp('nocreate');
+if isempty(pool)
+    pool = parpool(char(cfg.parallel.poolProfile), cfg.parallel.workerCount);
+    execution.parallel.poolProfileStatus = "created_requested_pool";
+elseif ~strcmp(pool.Cluster.Profile, char(cfg.parallel.poolProfile))
+    % An already running pool is a normal MATLAB session resource. Use it
+    % deterministically and record the deviation without emitting a warning.
+    execution.parallel.poolProfileStatus = "used_existing_pool";
+else
+    execution.parallel.poolProfileStatus = "used_matching_existing_pool";
+end
+execution.parallel.poolProfileUsed = string(pool.Cluster.Profile);
+execution.parallel.workerCountUsed = pool.NumWorkers;
+
+simInputs = vertcat(inputs{runnableIdx});
+parallelOutputs = parsim(simInputs, ...
+    'ShowProgress', onOff(cfg.parallel.showProgress), ...
+    'UseFastRestart', onOff(cfg.parallel.useFastRestart), ...
+    'ManageDependencies', 'on', ...
+    'StopOnError', 'off');
+for runIdx = 1:numel(runnableIdx)
+    idx = runnableIdx(runIdx);
+    outputs{idx} = parallelOutputs(runIdx);
+    execution.executedCaseIds(end + 1, 1) = caseIds(runIdx);
+end
+end
+
+function value = parallelExecutionTemplate(cfg)
+value = struct( ...
+    'requested', cfg.executionMode == "parallel", ...
+    'poolProfileRequested', string(cfg.parallel.poolProfile), ...
+    'workerCountRequested', cfg.parallel.workerCount, ...
+    'poolProfileUsed', "", ...
+    'workerCountUsed', NaN, ...
+    'poolProfileStatus', "not_started", ...
+    'useFastRestart', cfg.parallel.useFastRestart);
+end
+
+function value = onOff(flag)
+if flag
+    value = 'on';
+else
+    value = 'off';
+end
 end
 
 function [in, bridge] = applyFocusedVariables(in, caseCfg, defaults, model)

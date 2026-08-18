@@ -15,8 +15,6 @@ source: extracted-mask-description
 
 The component preserves four-species mass, species, and energy balance. It is a gas-phase L2 component and does not m.... From RouteAEjector_lib.
 
-The current formal copy keeps `ejector_enabled=false` for the cold-start baseline. Enable the pressure-driven equations only after pressure-window and initialization validation.
-
 ## Identity
 
 - Library: RouteAEjector_lib

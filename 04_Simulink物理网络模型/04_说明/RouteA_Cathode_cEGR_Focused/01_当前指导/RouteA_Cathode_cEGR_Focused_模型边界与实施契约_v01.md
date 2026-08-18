@@ -3,7 +3,7 @@
 日期：2026-08-17
 状态：V-SH 被选为当前唯一主动聚焦主线；结构副本、正式 runner、参数桥接、I/P/V 控制和性能分析契约已完成首轮收口，V-SH-W0 的模型可读化及结构/编译/运行/日志 warning 清零已完成；W1 case/边界契约、240 kW BOP 半定量标定和 CEGR 工程研究尚未完成。当前实现仍为 `Passive / SelfHumidifying / CathodeOutletBranchFlowProxy / CompressorInlet`，不构成工程方案验证。V-SH 专项约束和 W0-W6 执行计划见 `RouteA_cEGR_PEMFC_V-SH工程化建模约束与执行计划_v01.md`。
 源模型：`04_Simulink物理网络模型/01_模型/RouteA_GasMixture_Derived/PEMFuelCellSystem_GasMixture_cEGR_RouteA_v01.slx`  
-聚焦模型：`04_Simulink物理网络模型/01_模型/RouteA_Cathode_cEGR_Focused/PEMFuelCellSystem_Cathode_cEGR_Focused_v01.slx`
+聚焦模型：`04_Simulink物理网络模型/01_模型/RouteA_Cathode_cEGR_Focused/PEMFuelCellSystem_Cathode_cEGR_SelfHumidifying_v01.slx`
 
 ## 1. 研究目的
 
@@ -40,9 +40,9 @@ V-SH 聚焦模型用于研究被动阀门、自增湿电堆、阴极气路、cEG
 ## 5. 实施顺序
 
 1. V-SH-W0 已完成：清零结构、编译、运行和日志 warning，并完成正式 120 s W0 cold smoke 回归。
-2. 后续执行 V-SH-W1，固化可变 case 输入、参数来源和唯一写入点。
-3. 执行 V-SH-W2，完成 606 片、380 cm² 电堆和阴极 BOP 半定量标定。
-4. 执行 V-SH-W3/W4/W5，完成 CEGR 静态能力、气相冷凝风险和阀门动态边界。
+2. V-SH-W1 已为外部 240 kW case 固化来源、唯一写入点和冷启动输入合同；自增湿 case 不写入外部膜加湿 RH。
+3. V-SH-W2 的无回流 606 片、380 cm² 基线已完成 19 个测点的“18 个既有成功 case + 1 个定向回归”汇总；cEGR 稳态工况不由此自动通过。
+4. V-SH-W3 的首轮 52 case 静态能力与气相冷凝筛选已执行；后续执行 V-SH-W4/W5，并只围绕 W3 识别的边界扩展热/湿条件和阀门动态。
 5. W0-W5 完成后再与完整系统做必要的接口和边界对照；不得用完整系统替代 V-SH 的聚焦证据。
 
 不得把一次结构复制、smoke 或数值完成表述为 cEGR 工程方案已验证。
@@ -52,9 +52,10 @@ V-SH 聚焦模型用于研究被动阀门、自增湿电堆、阴极气路、cEG
 ### 6.1 已闭合的阴极和电堆控制
 
 - 电气边界保留 Current、Power、Voltage 三种模式，仍由同一个 `I_cmd`/电负载拓扑执行。
-- 阴极空气控制保留目标质量流量、目标 OER 和直接空压机命令三种模式。
+- 阴极空气控制保留目标质量流量、目标 OER、直接空压机命令及 V-SH 专用的“新鲜空气质量流闭环”四种模式。第四模式仅在本正式 V-SH 模型启用，反馈量为压缩机入口总质量流减实际 cEGR 回流质量流的非负值；它服务于“新鲜空气不变、回流增大时总流量增大”的工况定义。
 - 阴极源压力、源温度、新鲜空气 O2/H2O 组分、加湿器 RH/启用、阴极出口背压均通过统一 case 适配器进入命令 profile。
 - cEGR 保留启用、目标比例、PI/直接面积模式、阀面积限幅、执行器时间常数和阀前后压力观测。
+- `cold_start_only` 的非零 cEGR 目标必须以 `0 -> targetRatio` 渐变进入，并与新鲜空气流量建立期同步；禁止在零压缩机入口流量时将标量非零回流比直接写入命令 profile。
 - 电堆性能输出统一提供 I/V/P、堆温、单电池电压、电流密度、功率密度、氧过量系数和气相闭合结果。
 
 ### 6.2 简化阳极和热边界桥接
@@ -121,7 +122,9 @@ V-SH 聚焦模型用于研究被动阀门、自增湿电堆、阴极气路、cEG
 
 ### 7.3 研究工况与结果
 
-所有正式 case 使用同一聚焦模型、同一 `run_routeA_focused_study`、`cold_start_only`、`VariableStepAuto`、`RelTol=AbsTol=1e-3`、`MaxStep=5 s`、`600 s` 总时长和 `[540,600] s` 尾窗。正式 cEGR、背压、温度阈值、低负荷和标准 simCase 接入 case 均完成仿真并通过聚焦范围内验收。
+历史 focused case 使用同一聚焦模型、同一 `run_routeA_focused_study`、`cold_start_only`、`VariableStepAuto`、`RelTol=AbsTol=1e-3`、`MaxStep=5 s`、`600 s` 总时长和 `[540,600] s` 尾窗；它们仍须按各自输入合同解释。外部 240 kW 无回流基线已完成 19 点汇总，且 `0.1 A/cm^2 / target m_cegr/m_comp_inlet=0.05` 的首个 600 s cEGR 点通过（实际 `r_split` 是独立分流指标）。该外部案例的 cEGR 能力包络尚未完成，不能将历史 cEGR、背压或冷凝数值迁移为其余外部工况的通过证据。
+
+外部 240 kW 正式输入由 `routeA_focused_external240kw_cegr_matrix_case_factory` 生成，并已分两批以 4-worker、600 s cold-start `parsim` 执行完成。四个负载点为 `j=[0.1,0.2,0.4,1.0] A/cm^2`；其推荐 OER 分别为 `[5.0,3.6,2.4,1.8]`，阴极压力按用户确认的表压加 `0.101325 MPa` 转为模型绝压，气体/固定堆温按推荐工况写入既有边界。统一研究量为 `R_EGR=m_return/m_fresh`（压缩机入口），控制器输入明确换算为 `x_EGR=m_return/m_total=R_EGR/(1+R_EGR)`，`r_split` 只作独立支路指标。第一批“总流量不变”每负载用 `R_EGR=(OER_ref-1)*[0,0.10,0.25,0.50,0.75,1.00]`，共 24 case；第二批“新鲜空气不变”用统一 `[0,0.1,0.5,1,2,4,8]`，共 28 case，并由 mode 4 提升空压机总流量。启动期仅有两个 case 因新增 `Abs` 测量块连续过零中止；将其 `ZeroCross` 参照既有同义 Abs 设为 `off` 后，仅补算这两个 case 并原位合并正式 MAT，最终 52/52 完成且修复回归的 Diagnostic Viewer 为 0 error / 0 warning。结果随正式 runner 保存为 `study.cegrScreenAudit.auditTable`：入堆 OER 取尾窗最小 `lambdaCaIn`，`<1` 不可取、`1–1.2` 风险、`>1.2` 可行；目标/实际均比较同一 `R_EGR` 定义，同时独立报告控制器混合基比和 `r_split`；压缩机入口混合器、阴极气体和回流管均按气相饱和/冷凝率审计，不能表述为液水库存或压缩机含液耐受结论。52 case 的可读审计交付为 `02_结果/RouteA_Cathode_cEGR_Focused/outputs/20260818_vsh_cegr_audit/RouteA_External240kW_VSH_cEGR_技术审计结果_v01.xlsx`。
 
 代表性量化结果：
 

@@ -59,7 +59,7 @@ cegrOptions = struct( ...
 cegrProfile = routeA_normalize_electrical_profile( ...
     cegrSpec, "CEGR", cegrOptions);
 
-air = getAirConfig(caseCfg, baseline);
+air = getAirConfig(caseCfg, baseline, model);
 cathode = getCathodeControls(caseCfg, baseline);
 anode = getAnodeControls(caseCfg, baseline);
 thermal = getThermalControls(caseCfg, baseline);
@@ -591,7 +591,7 @@ validateScalarRange(cegr.directTargetRatio, [0, 0.5], ...
     'cegr.directTargetRatio');
 end
 
-function air = getAirConfig(caseCfg, baseline)
+function air = getAirConfig(caseCfg, baseline, model)
 air = struct('modeId', 2, ...
     'targetOer', baseline.air_target_oer, ...
     'targetMdot_kg_s', baseline.air_target_mdot_kg_s, ...
@@ -602,7 +602,14 @@ air = mergeKnownFields(air, getOptionalStruct(caseCfg, 'air'), ...
     'RouteA:AirControlField');
 air.pid = mergeKnownFields(air.pid, getOptionalStruct(air, 'pid'), ...
     'RouteA:AirControllerField');
-validateattributes(air.modeId, {'numeric'}, {'scalar', 'integer', '>=', 1, '<=', 3});
+maxAirMode = 3;
+if string(model) == "PEMFuelCellSystem_Cathode_cEGR_SelfHumidifying_v01"
+    % Mode 4 is implemented only by the V-SH focused model: feedback on
+    % m_fresh = max(0, abs(m_total_compressor_inlet)-abs(m_cEGR_return)).
+    maxAirMode = 4;
+end
+validateattributes(air.modeId, {'numeric'}, ...
+    {'scalar', 'integer', '>=', 1, '<=', maxAirMode});
 validateScalarRange(air.pid.Kp, [eps, Inf], 'air.pid.Kp');
 validateScalarRange(air.pid.Ki, [eps, Inf], 'air.pid.Ki');
 end

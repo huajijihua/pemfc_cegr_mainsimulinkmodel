@@ -40,6 +40,20 @@
 | 热管理 | `Thermal_Management_BOP` 中 Pump、Radiator、Heat Dissipation |
 | 控制与观测 | `System_Control_Observability/FCU_BoP_Control` 与唯一 `I_cmd` 电负载接口 |
 
+## 3.1 2026-08-18 接口语义化收口（已读回模型）
+
+正式模型已对系统级子系统边界做了一轮语义化收口，以下名称以 MATLAB MCP/SATK 对 `.slx` 的结构读回为准，不是仅修改图面标签：
+
+| 子系统 | 输入/物理接口 | 输出/物理接口 | 处理原则 |
+|---|---|---|---|
+| `Cathode_Air_cEGR_BOP` | `cegr_valve_area_command`、`cegr_return_gas_inlet`、`cathode_air_to_stack` | `compressor_inlet_mdot_control`、`egr_valve_upstream_pressure`、`egr_valve_downstream_pressure` | 删除原 `Conn1`–`Conn4` 边界端口，保留实际参与空气、回流和阀前后测量的接口 |
+| `Cathode_Exhaust_Backpressure_Water` | `cathode_exhaust_from_stack`、`cathode_outlet_pressure_input`、`egr_flow_measurement_tap`、`cathode_exhaust_flow_tap`、`cathode_outlet_temp_input`、`cathode_outlet_comp_input` | `cathode_exhaust_to_cegr`、`cegr_return_mdot`、`cathode_outlet_rh`、`cathode_exhaust_mdot`、`water_separation_excess_mdot`、`cathode_outlet_pressure_Pa`、`cathode_outlet_temperature_C`、`cathode_outlet_species_fraction` | 删除自反馈输入和未被顶层使用的 `Conn` 辅助测量边界；传感器/压力换算在子系统内部闭合 |
+| `Stack_Core` | `cathode_gas_inlet`、`anode_hydrogen_feed`、`cathode_chamber_temp_input`、热/电连接节点 | `cathode_egr_flow_tap`、`cathode_exhaust_backpressure`、`cathode_exhaust_flow_tap`、`cathode_outlet_pressure`、`cathode_outlet_temperature`、`cathode_outlet_composition`、`anode_exhaust` 等 | 将原 `ConnN`、`B/B1/C` 统一为介质、测点和能量/电端语义；`cathode_chamber_temp_input` 保留为明确但尚未在顶层接入的模型边界，不能据此宣称热边界已验证 |
+| `cEGR_Gas_Route_Selector` | `cathode_exhaust_from_separator` | `cegr_return_gas_to_cathode_air` | 用气体来源/去向命名父级和 `cEGR_PassThrough_Route` 变体，去除 `A/B` 的语义歧义 |
+| `Anode_Hydrogen_BOP`、`Thermal_Management_BOP` | `anode_hydrogen_feed`、`anode_exhaust`；`stack_mea_thermal_node`、`stack_thermal_mass_node` | `anode_exhaust_n2_fraction`、`anode_purge_valve_active`；热节点回路 | 阳极供氢/吹扫和热管理的简化输入分别封装在各自子系统边界，不再以散乱的顶层 `A/B/C` 或 `ConnN` 表达 |
+
+本次变更还同步将 `System_Control_Observability` 的控制与观测端口改为上述语义名称。端口命名清晰不等于物理行为已经验证；当前面板仍处于 `audit_pending`，水分离量仍是 L2 饱和度超额诊断量。
+
 ## 4. 使用边界
 
 1. 用户以页面中的设备、流向、控制目的和“当前不应外推的结论”描述需求；Agent 据此回查模型路径、参数和观测接口。
