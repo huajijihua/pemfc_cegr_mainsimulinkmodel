@@ -2,7 +2,7 @@
 
 文件类型：V-SH 专项当前指导、约束冻结与执行计划
 日期：2026-08-18
-状态：约束已冻结；V-SH-W0 已完成模型可读化及结构/编译/运行/日志 warning 清零。原 SATK 55 条端口诊断及审计中额外发现的 2 条阴极腔辅助 Cap 断线均已按官方组件语义修复、读回和回归；`model_check(root,["all"])` 为 healthy，正式模型 W0 已完整收口。
+状态：约束已冻结；V-SH-W0 已完成模型可读化及结构/编译/运行/日志 warning 清零。2026-08-19 已完成并保存阀前理想分流重构：`p_split` 同时接排气 V_BP 与回流 V_EGR，根层物理线和混合器编译断言已闭环；`model_check(root,["all"])` 为 healthy，W0 与两项 240 kW 代表性 CEGR smoke 已通过。
 
 ## 1. 决策范围与主线优先级
 
@@ -220,4 +220,60 @@ V-SH 只采用现有饱和蒸汽压、组分和质量守恒气相相变功能，
 
 所有结果继续区分 `implemented`、`structurally_verified`、`executed`、`behavior_verified`、`validated_for_scope` 和 `not_validated`。V-SH 完成不等于完整系统完成，也不自动证明 E-SH/P-SH。
 
-当前已知剩余风险：W0 结构 warning 出口已满足；目标气路分离后分流读回和 BOP 新一轮标定尚未执行。SATK 接口的 `find_system` 兼容性提示属于工具实现而非模型诊断；在重启会话后的 SATK `2026.08.12` 中仍可复现。若要求工具调用控制台亦无任何提示，需要 MathWorks 在 `MemoryAdapter.findBlockHandles` 的变体筛选逻辑中修补，不能通过模型修改或抑制 warning 解决。MATLAB Code Analyzer 在当前 Codex 会话可用，已对本轮修改的 runner/路径脚本完成静态检查。
+当前已知剩余风险：模型仍是气相 L2 筛选，不闭合液水库存、真实分离效率、设备额定选型或系统净功率。SATK 接口的 `find_system` 兼容性提示属于工具实现而非模型诊断；在重启会话后的 SATK `2026.08.12` 中仍可复现。若要求工具调用控制台亦无任何提示，需要 MathWorks 在 `MemoryAdapter.findBlockHandles` 的变体筛选逻辑中修补，不能通过模型修改或抑制 warning 解决。MATLAB Code Analyzer 已对本轮 V-SH runner、参数桥、观测和路径脚本完成静态检查。
+
+## 12. 2026-08-19 W3 研究报告重构与后续架构计划补充
+
+### 12.1 面向实验人员的分析工作簿定位
+
+W3 交付工作簿现定位为“V-SH 自增湿电堆阀门被动 cEGR 工程分析报告”，不再把版本差异或历史审计过程作为正文内容。正文顺序固定为：
+
+1. 研究结论与工程判断；
+2. V-SH 模型结构、阀门职责和控制逻辑；
+3. 变量英文注释、定义、单位、测量位置和装置选型建议；
+4. 气相冷凝/水汽风险及缓解方向；
+5. 52 个正式 case 的原始审计明细附录。
+
+工作簿正文必须明确：`R_EGR=m_return/m_fresh`、`x_EGR=m_return/m_total`、`OER_ref` 仅为无 cEGR 基准流量锚点；压力统一以 kPa 报告，并区分 `p_stack,out`、`p_split`、cEGR 阀前后压力和 `p_comp,in`。模型 `Local Restriction` 的有效面积只作为等效流阻/执行器变量，不直接替代真实阀门 DN、Cv/Kv 或厂家质量流量图。
+
+### 12.2 当前基线装置结构
+
+当前 V-SH 基线已改为阴极出口理想分流：
+
+`电堆阴极出口 / p_split -> V_BP -> Exhaust_Environment_Boundary`
+`电堆阴极出口 / p_split -> V_EGR -> CompressorInletMixer.cEGR`。
+
+最小受控硬件集只有排气支路 V_BP 和回流支路 V_EGR；三通为同一理想 Simscape 节点，不引入额外管路压降、后置气相流阻、压力泄放阀、止回阀或隔离阀。安全泄放属于未来硬件安全设计，不进入当前正式理想模型。
+
+**入口顺序必须按正式 V-SH 模型保持：** 新鲜空气与 cEGR 回流先在 `CompressorInletMixer`（压缩机入口混合器）汇合，随后进入空压机；空压机出口再经过 `Intercooler_L2_Interface`（中冷器 L2 接口/中冷器出口段），最后进入自增湿电堆。图示不得把“中冷器/混合器”合并成一个串联设备，也不得把混合器画到空压机之后。该顺序已由 `PEMFuelCellSystem_Cathode_cEGR_SelfHumidifying_v01.slx` 的 `blk_720` 结构读回确认：`CompressorInletMixer` 的 A/B/C 端分别接 Air Intake、Compressor 和 cEGR return，`Intercooler_L2_Interface` 的 A/B 端接 Compressor Volume 与 IntercoolerOutletHumiditySensor。
+
+**当前理想分流基线的压力口径必须拆开：** `p_stack,out`、`p_split` 和 `p_cEGR,up` 是同一理想出口节点的语义别名；`p_cEGR,down` 是 V_EGR 下游、压缩机入口混合器侧压力；`p_comp,in` 是压缩机入口混合器压力。因此，`Δp_EGR=p_cEGR,up−p_cEGR,down` 表示 V_EGR 局部压差，`Δp_BP=p_split−p_env` 表示排气 V_BP 局部压差。结果契约必须同时读回这两个压差，不能把 V_EGR 压差解释为整条出口到压缩机入口路径压差。
+
+### 12.3 阀前理想分流重构实施状态
+
+`V-SH-W3A：阀前理想分流拓扑` 已在当前正式模型中实施：
+
+`电堆阴极出口 -> 分流节点 ->（公共背压阀 -> 排气）+（cEGR 阀 -> 回流）`。
+
+当前模型已删除历史 `CommonGasPhaseBoundary_FC`、cEGR `EGRPipe`、根层 `cEGR_Mode_Selector` 以及排气支路 `Pipe (N Gas)1/Pressure Relief Valve`；保留官方质量流量传感器、P/T 测点和环境 Reservoir。正式 runner 复用同一 case/结果契约，已完成结构读回、编译、W0 及两个外部 240 kW 代表性 case 验证。该结果仍只支持本模型范围内的气相行为，不等同于硬件三通、阀门额定或安全泄放验证。
+
+### 12.4 工作簿图示要求补充
+
+面向实验人员的 V-SH 分析工作簿应至少包含三类结构图：
+
+- 当前阴极出口理想分流气路，并标出 `p_stack,out≈p_split≈p_cEGR,up`、`p_cEGR,down`、V_BP、V_EGR、排气支路和回流支路；
+- 公共背压环、cEGR 回流环及监督限幅/联锁层的控制关系；
+- 历史阀后分流结构仅作为错误拓扑对照，不再用于当前 CEGR 工程结论；两只当前阀的控制职责分别是排气压力和回流比例。
+
+图示是正文解释的一部分，不能用结构图替代变量定义、测点位置或模型边界说明。
+
+### 12.5 工况矩阵摘要的阅读口径
+
+面向实验人员的正文不得直接使用“完成 case”“候选数”等内部审计统计字段。工况矩阵摘要应先说明：
+
+- 两种进气控制策略分别固定什么、改变什么；
+- 四个负荷点和每个负荷的 `R_EGR` 目标扫描方式；
+- “直接筛选通过”的判据：实际 `OER_min>1.2`、`S≤0.95`、露点裕度 `≥2°C`、无混合器冷凝且阀面积未到上限；
+- 每个负荷下实际可用的 `R_EGR` 点、主要边界和实验建议。
+
+原始 52 case 仍保留在附录，正文只展示矩阵设计和关键工程结果。

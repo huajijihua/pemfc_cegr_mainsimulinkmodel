@@ -63,7 +63,7 @@ else
 end
 
 if isFocused
-    paths.oxygen = [paths.cathodeAir '/Fresh_Air_Compression_Mixing'];
+    paths.oxygen = [paths.cathodeAir '/Compressor_Inlet_Mixer'];
 else
     paths.oxygen = [paths.cathodeAir '/Oxygen Source'];
 end
@@ -103,7 +103,7 @@ paths.cathodeRHInWorkspace = [paths.cathodeHumidifier ...
 
 if isFocused
     paths.egrValve = [paths.cathodeAir '/cEGR_Return_Valve'];
-    paths.egrPipe = [paths.cathodeAir '/cEGR_Return_Pipe_FC'];
+    paths.egrPipe = "";
     paths.egrValveUpSensor = [paths.cathodeAir ...
         '/cEGR_Valve_Upstream_PT_Sensor'];
     paths.egrValveDownSensor = [paths.cathodeAir ...
@@ -124,7 +124,7 @@ paths.egrValveDownPConverter = [paths.cathodeAir ...
 
 if isFocused
     paths.cathodeExhaustBlock = [paths.cathodeExhaust ...
-        '/Exhaust_Backpressure_Boundary'];
+        '/Exhaust_Environment_Boundary'];
     paths.egrMassFlowSensor = [paths.cathodeExhaust ...
         '/cEGR_Return_Mass_Flow_Sensor'];
     paths.exhaustMassFlowSensor = [paths.cathodeExhaust ...

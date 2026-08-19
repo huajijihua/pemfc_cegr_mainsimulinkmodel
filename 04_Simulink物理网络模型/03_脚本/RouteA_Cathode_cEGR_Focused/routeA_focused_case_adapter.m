@@ -167,7 +167,6 @@ caseCfg.devices.cathode.separatorDpNominal_MPa = ...
     bop.separatorDpNominal_MPa;
 caseCfg.devices.cathode.separatorArea_m2 = bop.separatorArea_m2;
 caseCfg.devices.cegr.valveMaxArea_m2 = bop.cegrValveMaxArea_m2;
-caseCfg.devices.cegr.pipeDiameter_m = bop.cegrPipeDiameter_m;
 end
 
 function value = focusedDeviceValue(caseCfg, fieldName, default, limits)
