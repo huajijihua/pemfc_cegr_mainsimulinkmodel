@@ -82,10 +82,18 @@ for idx = 1:caseCount
         result.errorId = string(exception.identifier);
         result.errorMessage = string(getReport(exception, 'extended', ...
             'hyperlinks', 'off'));
-        result.failureCategory = "simulation_or_collection_error";
+        result.failureCategory = classifyFocusedFailure(result.errorMessage);
         execution.failedCaseIds(end + 1, 1) = caseId;
     end
     results{idx} = harmonizeResult(result);
+end
+
+preflight = routeA_focused_preflight(model, paths, defaults, cfg, ...
+    preparedInputs, preparedBridges);
+if ~preflight.passed
+    error('RouteA:FocusedPreflight', ...
+        'Focused runner preflight failed: %s.', ...
+        strjoin(preflight.failureReasons, '; '));
 end
 
 runnableIdx = find(~cellfun(@isempty, preparedInputs));
@@ -101,7 +109,7 @@ if ~isempty(runnableIdx)
             result.errorId = string(exception.identifier);
             result.errorMessage = string(getReport(exception, 'extended', ...
                 'hyperlinks', 'off'));
-            result.failureCategory = "batch_execution_error";
+            result.failureCategory = classifyFocusedFailure(result.errorMessage);
             results{idx} = harmonizeResult(result);
             execution.failedCaseIds(end + 1, 1) = result.caseId;
         end
@@ -133,7 +141,7 @@ for idx = runnableIdx(:).'
         result.errorId = string(exception.identifier);
         result.errorMessage = string(getReport(exception, 'extended', ...
             'hyperlinks', 'off'));
-        result.failureCategory = "simulation_or_collection_error";
+        result.failureCategory = classifyFocusedFailure(result.errorMessage);
         execution.failedCaseIds(end + 1, 1) = caseId;
     end
     results{idx} = harmonizeResult(result);
@@ -163,6 +171,7 @@ study.boundaryType = cfg.boundaryType;
 study.researchDuration_s = cfg.researchDuration_s;
 study.tailLogicalWindow_s = cfg.tailLogicalWindow_s;
 study.parameterInterface = defaults.interface;
+study.preflight = preflight;
 study.solver = struct( ...
     'name', cfg.solver, ...
     'relativeTolerance', cfg.relativeTolerance, ...
@@ -443,6 +452,21 @@ result = struct( ...
     'failureCategory', "not_run", ...
     'errorId', "", ...
     'errorMessage', "");
+end
+
+function category = classifyFocusedFailure(message)
+text = lower(string(message));
+if contains(text, "mass fractions must be non-negative") || ...
+        contains(text, "mass fraction") && contains(text, "non-negative")
+    category = "oxygen_supply_mass_fraction_nonnegative";
+elseif contains(text, "连续过零") || ...
+        contains(text, "consecutive zero-crossing")
+    category = "zero_crossing_chatter";
+elseif contains(text, "assertion")
+    category = "simulation_assertion";
+else
+    category = "simulation_or_collection_error";
+end
 end
 
 function result = harmonizeResult(value)

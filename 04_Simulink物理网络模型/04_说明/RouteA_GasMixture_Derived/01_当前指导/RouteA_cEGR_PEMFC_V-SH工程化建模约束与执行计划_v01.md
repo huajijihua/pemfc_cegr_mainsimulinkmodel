@@ -2,7 +2,7 @@
 
 文件类型：V-SH 专项当前指导、约束冻结与执行计划
 日期：2026-08-18
-状态：约束已冻结；V-SH-W0 已完成模型可读化及结构/编译/运行/日志 warning 清零。2026-08-19 已完成并保存阀前理想分流重构：`p_split` 同时接排气 V_BP 与回流 V_EGR，根层物理线和混合器编译断言已闭环；`model_check(root,["all"])` 为 healthy，W0 与两项 240 kW 代表性 CEGR smoke 已通过。
+状态：约束已冻结；V-SH-W0 已完成模型可读化及结构/编译/运行/日志 warning 清零。2026-08-19 已完成并保存阀前理想分流重构：`p_split` 同时接排气 V_BP 与回流 V_EGR，根层物理线和混合器编译断言已闭环；`model_check(root,["all"])` 为 healthy，W0 与两项 240 kW 代表性 CEGR smoke 已通过。2026-08-20 V6 zero-crossing 敏感性已完成，结果归类为 solver + control 敏感；pressure eligibility 字段语义已收口。
 
 ## 1. 决策范围与主线优先级
 
@@ -165,9 +165,9 @@ V-SH 只采用现有饱和蒸汽压、组分和质量守恒气相相变功能，
 - 通过 `model_read`、`model_check`、update/compile 和代表性 cold smoke；
 - 出口：结构、编译、运行和日志 warning 全部为零。
 
-当前实施状态（2026-08-18）：
+当前实施状态（2026-08-20 live re-audit）：
 
-- 顶层已收敛为 8 个语义功能容器；参数桥已收敛为 V-SH 实际 24 个写点，V-SH 不再写入引射器变量；
+- 顶层已收敛为 8 个语义功能容器；V-SH `focusedParameterBridge.modelWritePoints` 当前读回为 23 个 focused 写点，shared adapter 的 `env_yO2/env_yH20`、command profile 和边界变量另行记录；V-SH 不再写入引射器变量；
 - 代表性正式 cold smoke 为 `self_humidifying`、Current 5 A、cEGR target/profile 0、120 s、尾窗 `[90,120]`、`steadyWindowDuration_s=30`；`SimulationInput -> sim -> assess` 返回 `SIM_COMPLETED=1`、`CASE_PASSED=1`、`STUDY_PASSED=1`、runtime warning diagnostics 0；
 - 外部 240 kW W1/W2 使用 `240kw电堆数据.txt` 的 19 个电气/流量点与 5 个绝对压力/气温锚点，并用推荐工况表的冷却液均值作为固定堆温边界；无回流 19 点基线由 18 个既有成功 case 和 j=1.7 A/cm² 定向回归汇总，11 点电压验证 RMSE 为 14.728138 mV、五点入口压力 RMSE 为 5.921663 kPa。W3 首个 `0.1 A/cm² / target m_cegr/m_comp_inlet=0.05` 600 s 点通过，实际 `r_split` 仅作独立支路代理指标；cEGR 能力包络尚未完成；
 - 对外部 240 kW 的 `cold_start_only` cEGR case，case factory 必须把非零目标设为与新鲜空气相同建立期的 `0 -> targetRatio` 渐变。该规则来自已复现的冷态突跳阻塞修复；它是数值输入合同，不是阀门或回流物理性能结论；
@@ -196,7 +196,7 @@ V-SH 只采用现有饱和蒸汽压、组分和质量守恒气相相变功能，
 - 记录阀面积、阀压差、回流/排放流量、O2、压力和堆功率；
 - 出口：能力图、约束边界和失败分类。
 
-当前外部 240 kW 的 W3 输入已由 `routeA_focused_external240kw_cegr_matrix_case_factory` 生成并完成正式研究运行：两个 4-worker 并行 600 s cold-start 批次共 52 case。总流量不变批次为 24 case：每一负载扫 `R_EGR=(OER_ref-1)*[0,0.10,0.25,0.50,0.75,1.00]`，保持参考 OER 对应的压缩机总质量流；新鲜空气不变批次为 28 case：每一负载扫 `[0,0.1,0.5,1,2,4,8]`，使用 V-SH mode 4 对 `m_fresh=max(0,|m_total|-|m_cEGR|)` 反馈并随回流提高总流量。启动期有两个 case 因 mode-4 新增的 `Abs` 测量块产生连续零交叉而停止；参照既有同义块，将 `A98_TotalMdot_Abs` 与 `A98_cEGRReturnMdot_Abs` 的 `ZeroCross` 设为 `off`，只补算两个失败 case 后回填正式 MAT，最终 52/52 数值完成，修复 case 的 Diagnostic Viewer 为 0 error / 0 warning。实际入堆 OER 的判据为 `<1` 不可取、`1–1.2` 风险、`>1.2` 可行；目标/实际回流均按 `R_EGR` 比较，同时报告控制器混合基比与 `r_split`；压缩机入口混合器、阴极气体及回流管的气相饱和/冷凝状态进入审计表。W3 本轮结果为模型范围内的气相筛选，而非阀门额定、液水库存、液滴输运或压缩机耐液工程验证；可读交付更新为 `02_结果/RouteA_Cathode_cEGR_Focused/outputs/20260818_vsh_cegr_audit/RouteA_External240kW_VSH_cEGR_技术审计结果_v02.xlsx`。v02 将原“OER 命令”明确为无 cEGR 基准 `OER_ref`，单列总流量不变与新鲜空气不变的流量边界；阀压差及压力链统一以 kPa 报告，并以阀前后实测 `Δp_valve=p_up-p_down`、阀面积分数、实际 `R_EGR`、实际 OER 与气相筛选共同解释回流能力。该工作簿已由本机 Microsoft Excel 无恢复提示地直接打开复核。
+当前外部 240 kW 的 W3 输入已由 `routeA_focused_external240kw_cegr_matrix_case_factory` 生成并完成正式研究运行：两个 4-worker 并行 600 s cold-start 批次共 52 case。总流量不变批次为 24 case：每一负载扫 `R_EGR=(OER_ref-1)*[0,0.10,0.25,0.50,0.75,1.00]`，保持参考 OER 对应的压缩机总质量流；新鲜空气不变批次为 28 case：每一负载扫 `[0,0.1,0.5,1,2,4,8]`，使用 V-SH mode 4 对 `m_fresh=max(0,|m_total|-|m_cEGR|)` 反馈并随回流提高总流量。正式 MAT 读回为总流量不变 23/24 个仿真完成、新鲜空气不变 28/28 个仿真完成，即 51/52 个数值完成；总流量固定 `j=0.1/R_EGR=4` 在约 267 s 因阴极气体质量分数非负断言中止。新鲜空气固定批次虽 28/28 完成仿真，但 6 个 case 因阀面积饱和或回流跟踪失败，不应写成工程筛选通过。实际入堆 OER 的判据为 `<1` 不可取、`1–1.2` 风险、`>1.2` 可行；目标/实际回流均按 `R_EGR` 比较，同时报告控制器混合基比与 `r_split`；压缩机入口混合器、阴极气体及回流管的气相饱和/冷凝状态进入审计表。W3 本轮结果为模型范围内的气相筛选，而非阀门额定、液水库存、液滴输运或压缩机耐液工程验证；可读交付为 `02_结果/RouteA_Cathode_cEGR_Focused/outputs/20260818_vsh_cegr_audit/240kW尺寸-自增湿电堆-阀门被动式-阴极尾气循环技术审计_v02.xlsx`。v02 将原“OER 命令”明确为无 cEGR 基准 `OER_ref`，单列总流量不变与新鲜空气不变的流量边界；附录现已由当前拓扑 MAT 回填 p_split、p_EGR,up、p_EGR,down、Δp_BP、Δp_path、三项等式偏差、来源、单位和测点；v02 公式错误扫描为 0，5 个工作表和嵌入图已渲染复核，报告压力链准入完成。
 
 ### V-SH-W4：温度/湿度/压力扰动和冷凝风险
 
@@ -232,7 +232,7 @@ W3 交付工作簿现定位为“V-SH 自增湿电堆阀门被动 cEGR 工程分
 2. V-SH 模型结构、阀门职责和控制逻辑；
 3. 变量英文注释、定义、单位、测量位置和装置选型建议；
 4. 气相冷凝/水汽风险及缓解方向；
-5. 52 个正式 case 的原始审计明细附录。
+5. 52 个正式 case 的原始审计明细附录；完成数与筛选通过数必须分开。
 
 工作簿正文必须明确：`R_EGR=m_return/m_fresh`、`x_EGR=m_return/m_total`、`OER_ref` 仅为无 cEGR 基准流量锚点；压力统一以 kPa 报告，并区分 `p_stack,out`、`p_split`、cEGR 阀前后压力和 `p_comp,in`。模型 `Local Restriction` 的有效面积只作为等效流阻/执行器变量，不直接替代真实阀门 DN、Cv/Kv 或厂家质量流量图。
 
@@ -277,3 +277,27 @@ W3 交付工作簿现定位为“V-SH 自增湿电堆阀门被动 cEGR 工程分
 - 每个负荷下实际可用的 `R_EGR` 点、主要边界和实验建议。
 
 原始 52 case 仍保留在附录，正文只展示矩阵设计和关键工程结果。
+
+### 12.6 2026-08-20 live re-audit 证据与准入结论
+
+- 当前 Codex MATLAB MCP/SATK 会话实际返回 MATLAB/Simulink R2025b；`library.settingsLookup()` gate pass；指定模型 `model_overview`、`model_read`、`model_check(root,["all"])`、update/compile 均成功，`Dirty=off`，最新 Diagnostic Viewer 为 0 error/0 warning/0 info。SATK 仍打印 `FindSystemDefaultVariantsOptionWithVariantModel` 兼容性提示；它属于工具层提示，不是模型诊断。当前 `cEGR_Return_Valve` 活动变体为 `routeA_cegr_valve_mode_id == 1`（Open）。
+- 正式 runner re-audit 证据：`outputs/20260820_vsh_reaudit/RouteA_VSH_reaudit_W0_120s_20260820.mat` 的 W0 5 A/120 s 为 `simCompleted=1, passed=1, studyPassed=1`；`RouteA_VSH_reaudit_240kW_rep_j0p4_j1p0_R0p1_600s_20260820.mat` 的两个 240 kW 代表 case 均通过，pressure/water observations 均 collected。当前拓扑尾窗满足 `p_stack,out≈p_split≈p_EGR,up`、`p_EGR,down≈p_comp,in`，并保持气相闭合。
+- 参数扰动证据：`RouteA_VSH_reaudit_temperature_perturbation_j0p4_120s_20260820.mat` 中 `focused.cathodeGasTemperature_C=60/90°C` 真实改变 Compressor Volume/中冷器后/堆阴极气体温度；`env_T` 仍负责 Air Intake/压缩机入口混合器环境边界。该职责已写入 parameter bridge，后续不得把两者合并为一个“入口温度”。
+- 结论边界：当前 V-SH 模型达到 `structurally_verified + executed + behavior_verified_for_focused_scope`；不升级为 `validated_for_scope` 的液水库存、液滴输运、分离效率、阀门额定、压缩机耐液或系统净功率结论。V4 边界温度扰动、V5 动态目标验证和 V6 zero-crossing 敏感性已完成；V2 的高负荷 fresh-air 基线仍保留 2 个 `zero_crossing_chatter` 失败，不能把 V2 assessment 标为全通过。
+
+### 12.7 2026-08-20 V0-V5 详细验证收口
+
+- V0：`RouteA_VSH_V0_5A_120s_20260820.mat`，5 A、无 cEGR、120 s、serial，`simCompleted=1`、`passed=1`、preflight 通过；模型仍 `Dirty=off`，诊断 0/0/0。
+- V1：`RouteA_VSH_V1_parameter_consumers_120s_20260820.mat`，22 case、22/22 完成并局部通过；11/11 baseline/perturbation pair 产生了可读的同义观测响应。电流、R_EGR/x_EGR、`env_T`、focused 阴极气体温度、环境 RH/H2O、O2、堆温和阴极等效流阻响应明确；阀最大面积、最小面积和背压 Ki 的响应量级较小，当前仅标记为 behavior response observed，不作为宽范围标定。
+- V2：`RouteA_VSH_V2_external240_baseline_600s_20260820.mat`，19 个 240 kW 无 cEGR 基线 case 中 17 个完成/局部通过；j=1.1 与 j=1.5 A/cm² 在 `A98_FreshAirMdot_Nonnegative` 与 PID Saturation 触发 `zero_crossing_chatter`，保留为控制数值边界。电气留出点 9 个，电压 RMSE=14.3739 mV、最大绝对误差=19.6948 mV、极化单调性通过；5 个压力锚点 inlet RMSE=5.9217 kPa、outlet RMSE≈0、通道压降单调且 10 kPa 门通过；V6 后处理后 `comparisonEligible=1`、`blockedReason=""`、`pressure.passed=1`，压力映射不再被误标为阻塞。整体 assessment 仍因 17/19 完成率及温度/气体温度门未通过。气体温度出口比较 RMSE=5.0504°C、最大误差=8.2679°C，继续按近似诊断使用。
+- W3：当前拓扑两批正式 600 s cold-start 共 52 case；total-flow 23/24 完成，失败 case 为 j=0.1、R_EGR=4 的 `oxygen_supply_mass_fraction_nonnegative`；fresh-air 28/28 完成，其中 6 个阀面积饱和/回流跟踪失败。压力链字段已由当前 MAT 回填到 v02 附录的 AY:BM 列，公式错误扫描 0，5 个工作表和嵌入图已重新渲染。
+- V4：`RouteA_VSH_V4_boundary_temperature_120s_20260820.mat`，8/8 完成；OER 边界 j=0.2、R=2.6 的 `lambda_min` 约 1.044–1.188，仍属 OER 风险包络；冷凝边界 j=0.4、R=0.5 在 60/70°C 出现 S>1 和非零气相冷凝，80/90°C 冷凝消失但稳态/跟踪状态仍需复核。该阶段用于边界定位，不把风险 case 写成通过。
+- V5：`RouteA_VSH_V5_dynamic_control_600s_20260820.mat`，低/中负荷 2/2 完成并通过；logsout 各保留 21 个信号。时间序列确认 180 s、360 s 目标变化使 `routeA_egr_ratio_comp_in` 分别达到 0.0909、0.1667（R_EGR=0.1、0.2），EGR 流量和阀面积同步变化，p_stack,out 尾段分别约 141.325、171.325 kPa abs。
+- 当前证据级别：V0/V1/V4/V5 为 `executed + behavior_verified`（限于气相+接口范围）；W3 为 `executed + failure_classified + gas_phase_screen`；V2 为 `partially behavior_verified`，不能写成完整基线标定通过；V6 为 `executed + parameter_sensitivity_behavior_verified`，尚不构成硬件供气边界验证。
+
+### 12.8 2026-08-20 V6 zero-crossing 敏感性与 pressure 语义收口
+
+- V6 结果：`RouteA_VSH_zero_crossing_sensitivity_600s_20260820.mat`，7 组 × 2 个目标负荷，共 14 case；B/S1/C1/F1/F2 共 10 case 在约 `3.1554436e-30 s` 的连续过零区间失败，错误链为 `A98_FreshAirMdot_Nonnegative -> PID Controller -> Saturation`，未修改断言或截断负质量分数。
+- S2（RelTol=AbsTol=1e-4，MaxStep=5 s）2/2 完成并局部通过；C2（Kp=10，Ki=1）2/2 完成并局部通过。两组实际 fresh-air 流量均跟踪目标，阴极入口 O2 最小质量分数约 `0.2338517`，`lambda_min` 分别约 `1.9991` 和 `1.7573`。
+- F1/F2（目标 fresh-air 分别增加 5%/10%）均未恢复，且失败 case 没有可用的尾窗供气上限观测；因此当前只能判定为 `solver_and_control_sensitive`，没有足够证据称为真实空气供给能力边界，也不能升级为硬件额定结论。
+- pressure assessment 字段合同已改为：`comparisonEligible` 只表示测点映射是否具备比较资格；`blockedReason` 只表示资格阻塞，eligible 时为空。V2 MAT 已重新后处理并保存，原始语义版本备份为 `RouteA_VSH_V2_external240_baseline_600s_20260820_pre_v6_pressure_semantics.mat`。
