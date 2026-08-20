@@ -42,8 +42,172 @@ result.waterBalance = focusedWaterBalance(result.gasClosure, caseCfg);
 result.antiCondensation = routeA_focused_anti_condensation_analysis( ...
     result, result.pressureObservations, result.waterObservations, context);
 result.performance = routeA_focused_performance_metrics(result, context);
+result.membraneHumidifier = focusedMembraneHumidifierOutputs( ...
+    out, context.tailWindow_s);
+result.performance.membraneHumidifier = result.membraneHumidifier;
 result.parameterBridge = context.focusedParameterBridge;
 result.scope = "focused complete cathode and stack; fixed anode and thermal boundaries";
+end
+
+function membrane = focusedMembraneHumidifierOutputs(out, tailWindow_s)
+% Read the V-MH observation contract without inventing endpoint values.
+
+membrane = struct( ...
+    'schemaVersion', "RouteA_Focused_MembraneHumidifier_v01", ...
+    'status', "not_available", ...
+    'architecture', "stack_outlet_to_wet_side_to_existing_split", ...
+    'drySide', membraneSideTemplate("dry"), ...
+    'wetSide', membraneSideTemplate("wet"), ...
+    'waterTransfer', struct( ...
+        'raw', seriesStatsTemplate('kg/s'), ...
+        'filtered', seriesStatsTemplate('kg/s'), ...
+        'direction', "not_available", ...
+        'status', "not_available"), ...
+    'heatTransfer', struct( ...
+        'status', "not_independently_measured", ...
+        'modelElement', "Membrane_Wall_Conductive_Heat_Transfer"), ...
+    'pressureDrop', struct( ...
+        'status', "endpoint_sensor_pending", ...
+        'drySide', seriesStatsTemplate('Pa'), ...
+        'wetSide', seriesStatsTemplate('Pa')), ...
+    'massClosure', struct( ...
+        'status', "equal_opposite_MIn_by_construction_not_independent_sensor_verified", ...
+        'expectedDryPlusWetWaterSource_kg_s', 0), ...
+    'energyClosure', struct( ...
+        'status', "Pipe_MIn_TIn_and_conductive_wall_present_not_independently_measured"));
+
+membrane.drySide = readMembraneSide(out, "dry", tailWindow_s);
+membrane.wetSide = readMembraneSide(out, "wet", tailWindow_s);
+membrane.pressureDrop.drySide = membrane.drySide.pressure;
+membrane.pressureDrop.wetSide = membrane.wetSide.pressure;
+membrane.waterTransfer.raw = readSeries(out, ...
+    'routeA_membrane_water_transfer_raw_kg_s', tailWindow_s, 'kg/s');
+membrane.waterTransfer.filtered = readSeries(out, ...
+    'routeA_membrane_water_transfer_kg_s', tailWindow_s, 'kg/s');
+if membrane.waterTransfer.filtered.available
+    if membrane.waterTransfer.filtered.mean > 0
+        membrane.waterTransfer.direction = "wet_to_dry";
+    elseif membrane.waterTransfer.filtered.mean < 0
+        membrane.waterTransfer.direction = "dry_to_wet";
+    else
+        membrane.waterTransfer.direction = "zero_net_transfer";
+    end
+    membrane.waterTransfer.status = ...
+        "pressure_difference_conductance_with_first_order_dynamic_state";
+end
+if membrane.drySide.available && membrane.wetSide.available && ...
+        membrane.waterTransfer.filtered.available
+    membrane.status = "observed_internal_pipe_states_and_water_transfer";
+end
+end
+
+function side = readMembraneSide(out, sideName, tailWindow_s)
+side = membraneSideTemplate(sideName);
+prefix = "routeA_membrane_" + string(sideName) + "_";
+side.composition = readSeries(out, ...
+    char(prefix + "composition_mole_fraction"), tailWindow_s, '1');
+side.pressure = readSeries(out, ...
+    char(prefix + "pressure_Pa"), tailWindow_s, 'Pa');
+side.temperature = readSeries(out, ...
+    char(prefix + "temperature_K"), tailWindow_s, 'K');
+side.h2oPartialPressure = readSeries(out, ...
+    char(prefix + "h2o_partial_pressure_Pa"), tailWindow_s, 'Pa');
+side.available = side.composition.available || side.pressure.available || ...
+    side.temperature.available || side.h2oPartialPressure.available;
+if side.available
+    side.status = "pipe_volume_state_observed";
+end
+end
+
+function side = membraneSideTemplate(name)
+side = struct( ...
+    'name', string(name), ...
+    'available', false, ...
+    'status', "not_available", ...
+    'composition', seriesStatsTemplate('1'), ...
+    'pressure', seriesStatsTemplate('Pa'), ...
+    'temperature', seriesStatsTemplate('K'), ...
+    'h2oPartialPressure', seriesStatsTemplate('Pa'));
+end
+
+function stats = readSeries(out, name, tailWindow_s, unit)
+stats = seriesStatsTemplate(unit);
+if ~hasSimulationOutput(out, name)
+    return;
+end
+value = out.(name);
+[time, data, ok] = decodeWorkspaceOutput(value);
+if ~ok || isempty(time) || isempty(data)
+    return;
+end
+data = reshapeTimeData(data, numel(time));
+window = time >= tailWindow_s(1) & time <= tailWindow_s(2);
+if ~any(window)
+    window = true(size(time));
+end
+values = data(:, window);
+stats.available = true;
+stats.unit = string(unit);
+stats.timeStart_s = time(find(window, 1, 'first'));
+stats.timeEnd_s = time(find(window, 1, 'last'));
+stats.first = data(:, find(window, 1, 'first'));
+stats.last = data(:, find(window, 1, 'last'));
+stats.mean = mean(values, 2, 'omitnan');
+stats.min = min(values, [], 2, 'omitnan');
+stats.max = max(values, [], 2, 'omitnan');
+end
+
+function stats = seriesStatsTemplate(unit)
+stats = struct( ...
+    'available', false, ...
+    'unit', string(unit), ...
+    'timeStart_s', NaN, ...
+    'timeEnd_s', NaN, ...
+    'first', NaN, ...
+    'last', NaN, ...
+    'mean', NaN, ...
+    'min', NaN, ...
+    'max', NaN);
+end
+
+function present = hasSimulationOutput(out, name)
+present = false;
+try
+    present = any(strcmp(out.who, name));
+catch
+end
+end
+
+function [time, data, ok] = decodeWorkspaceOutput(value)
+time = [];
+data = [];
+ok = false;
+if isa(value, 'timeseries')
+    time = value.Time(:);
+    data = value.Data;
+    ok = true;
+elseif isstruct(value) && isfield(value, 'time') && ...
+        isfield(value, 'signals') && isfield(value.signals, 'values')
+    time = value.time(:);
+    data = value.signals.values;
+    ok = true;
+end
+end
+
+function data = reshapeTimeData(data, timeCount)
+if isvector(data) && numel(data) == timeCount
+    data = reshape(data, 1, timeCount);
+    return;
+end
+dimensions = size(data);
+timeDimension = find(dimensions == timeCount, 1, 'last');
+if isempty(timeDimension)
+    data = reshape(data, [], timeCount);
+    return;
+end
+order = [setdiff(1:ndims(data), timeDimension, 'stable'), timeDimension];
+data = permute(data, order);
+data = reshape(data, [], timeCount);
 end
 
 function balance = focusedWaterBalance(gasClosure, caseCfg)

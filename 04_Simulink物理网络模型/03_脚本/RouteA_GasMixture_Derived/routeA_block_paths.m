@@ -6,9 +6,23 @@ paths = struct();
 paths.model = model;
 
 isFocused = contains(string(model), "Cathode_cEGR");
+isExternalMembrane = contains(string(model), ...
+    "ExternalMembraneHumidifier");
 if isFocused
     paths.stack = [model '/PEMFC_Stack_Core'];
     paths.cathodeAir = [model '/Cathode_Air_Supply_and_cEGR'];
+    if isExternalMembrane
+        paths.cathodeAirCore = [paths.cathodeAir ...
+            '/Fresh_Air_Compression_and_cEGR'];
+        paths.membraneHumidifier = [paths.cathodeAir ...
+            '/Cathode_Membrane_Humidifier'];
+        paths.inletInstrumentation = [paths.cathodeAir ...
+            '/Cathode_Inlet_Instrumentation'];
+    else
+        paths.cathodeAirCore = paths.cathodeAir;
+        paths.membraneHumidifier = "";
+        paths.inletInstrumentation = "";
+    end
     paths.cathodeExhaust = [model '/Cathode_Exhaust_and_Backpressure'];
     paths.anode = [model '/Simplified_Anode_Boundary'];
     paths.thermal = [model '/Fixed_Stack_Temperature_Boundary'];
@@ -19,6 +33,9 @@ if isFocused
 else
     paths.stack = [model '/Stack_Core'];
     paths.cathodeAir = [model '/Cathode_Air_cEGR_BOP'];
+    paths.cathodeAirCore = paths.cathodeAir;
+    paths.membraneHumidifier = "";
+    paths.inletInstrumentation = "";
     paths.cathodeExhaust = [model '/Cathode_Exhaust_Backpressure_Water'];
     paths.anode = [model '/Anode_Hydrogen_BOP'];
     paths.thermal = [model '/Thermal_Management_BOP'];
@@ -63,7 +80,7 @@ else
 end
 
 if isFocused
-    paths.oxygen = [paths.cathodeAir '/Compressor_Inlet_Mixer'];
+    paths.oxygen = [paths.cathodeAirCore '/Compressor_Inlet_Mixer'];
 else
     paths.oxygen = [paths.cathodeAir '/Oxygen Source'];
 end
@@ -102,11 +119,11 @@ paths.cathodeRHInWorkspace = [paths.cathodeHumidifier ...
     '/RH_ca_in_ToWorkspace'];
 
 if isFocused
-    paths.egrValve = [paths.cathodeAir '/cEGR_Return_Valve'];
+    paths.egrValve = [paths.cathodeAirCore '/cEGR_Return_Valve'];
     paths.egrPipe = "";
-    paths.egrValveUpSensor = [paths.cathodeAir ...
+    paths.egrValveUpSensor = [paths.cathodeAirCore ...
         '/cEGR_Valve_Upstream_PT_Sensor'];
-    paths.egrValveDownSensor = [paths.cathodeAir ...
+    paths.egrValveDownSensor = [paths.cathodeAirCore ...
         '/cEGR_Valve_Downstream_PT_Sensor'];
 else
     paths.egrValve = [paths.cathodeAir '/EGRValveRestriction'];
@@ -116,10 +133,10 @@ else
 end
 paths.egrValveClosed = [paths.egrValve '/Closed'];
 paths.egrValveOpen = [paths.egrValve '/Open'];
-paths.egrValveUpReference = [paths.cathodeAir '/EGRValveUpPTRef'];
-paths.egrValveDownReference = [paths.cathodeAir '/EGRValveDownPTRef'];
-paths.egrValveUpPConverter = [paths.cathodeAir '/EGRValveUpP_Converter'];
-paths.egrValveDownPConverter = [paths.cathodeAir ...
+paths.egrValveUpReference = [paths.cathodeAirCore '/EGRValveUpPTRef'];
+paths.egrValveDownReference = [paths.cathodeAirCore '/EGRValveDownPTRef'];
+paths.egrValveUpPConverter = [paths.cathodeAirCore '/EGRValveUpP_Converter'];
+paths.egrValveDownPConverter = [paths.cathodeAirCore ...
     '/EGRValveDownP_Converter'];
 
 if isFocused

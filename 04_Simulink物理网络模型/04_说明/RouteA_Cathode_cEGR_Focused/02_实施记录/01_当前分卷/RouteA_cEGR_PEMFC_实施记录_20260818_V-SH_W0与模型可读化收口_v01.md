@@ -2,7 +2,7 @@
 
 ## 前置决策
 
-- `04_Simulink物理网络模型/04_说明/RouteA_GasMixture_Derived/01_当前指导/RouteA_cEGR_PEMFC_V-SH工程化建模约束与执行计划_v01.md`
+- `04_Simulink物理网络模型/04_说明/RouteA_Cathode_cEGR_Focused/01_当前指导/RouteA_cEGR_PEMFC_V-SH工程化建模约束与执行计划_v01.md`
 - `04_Simulink物理网络模型/04_说明/RouteA_Cathode_cEGR_Focused/01_当前指导/RouteA_Cathode_cEGR_Focused_模型边界与实施契约_v01.md`
 - `04_Simulink物理网络模型/04_说明/RouteA_GasMixture_Derived/01_当前指导/RouteA_cEGR_PEMFC_模型裁决与资产处置_v01.md`
 - `04_Simulink物理网络模型/04_说明/RouteA_GasMixture_Derived/01_当前指导/RouteA_cEGR_PEMFC_仿真工具链与协同接口约束_v01.md`
