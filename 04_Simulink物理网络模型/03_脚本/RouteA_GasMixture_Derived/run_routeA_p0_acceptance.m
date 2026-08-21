@@ -328,7 +328,7 @@ if ~options.saveReport
 end
 resultFile = string(options.resultFile);
 if strlength(resultFile) == 0
-    resultRoot = fullfile(report.paths.simulinkRoot, 'outputs', ...
+    resultRoot = fullfile(report.paths.resultRoot, 'outputs', ...
         'RouteA_P0_acceptance');
     if ~isfolder(resultRoot)
         mkdir(resultRoot);

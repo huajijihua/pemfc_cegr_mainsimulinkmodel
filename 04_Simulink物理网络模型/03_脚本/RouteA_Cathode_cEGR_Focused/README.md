@@ -3,12 +3,14 @@
 本目录只服务 `RouteA_Cathode_cEGR_Focused` 轻量研究模型，不修改或替代
 `RouteA_GasMixture_Derived` 的完整系统 runner。
 
-当前活动模型注册为三份：阀门被动湿化接口基线
-`PEMFuelCellSystem_Cathode_cEGR_Focused_v01`、阀门被动自增湿模型
-`PEMFuelCellSystem_Cathode_cEGR_SelfHumidifying_v01` 和引射器自增湿副本
-`PEMFuelCellSystem_Cathode_cEGR_Ejector_SelfHumidifying_v01`。它们对应六配置目标矩阵中的
-V-MH、V-SH 和 E-SH；外部膜加湿器的双侧传质模型、主动循环泵模型以及 E-MH/P-SH/P-MH
-仍未建立。当前湿化接口基线不能被称为真实外部膜加湿器，E-SH 开启模式也不能作为已验证引射器性能。
+当前活动系统模型包括公共接口基线
+`PEMFuelCellSystem_Cathode_cEGR_Focused_v01`、候选核心参考 V-SH
+`PEMFuelCellSystem_Cathode_cEGR_SelfHumidifying_v01`、尚未完成工程闭环的 V-MH
+`PEMFuelCellSystem_Cathode_cEGR_ExternalMembraneHumidifier_v01`，以及仍属于原型的 E-SH
+`PEMFuelCellSystem_Cathode_cEGR_Ejector_SelfHumidifying_v01`。另有引射器组件库和两个组件测试模型，
+均不计作目标配置。E-MH/P-SH/P-MH 尚无正式系统模型；阀门被动台架扩展等待用户提供结构。
+
+V-SH 在结构、参数链和代表工况重新闭环前只是候选参考，不得直接作为其他四个车载架构的无条件正确基准。V-MH 不得表述为已完成膜加湿器设备模型；E-SH 也不得表述为已验证引射器性能。所有新配置继续复用本目录的同一正式 runner，不新增架构专属 `run_*.m`。
 
 ## 正式入口
 
@@ -53,4 +55,4 @@ V-MH、V-SH 和 E-SH；外部膜加湿器的双侧传质模型、主动循环泵
 
 外部案例的后续 CEGR 研究必须先运行无 CEGR 基准与候选回流工况，再比较 `m_H2O`、`m_cegr`、`r_split`、氧计量比、氧分压、压力链和露点裕度。修复气体温度边界前的 CEGR 筛选结果不可用于湿化或性能结论。
 
-当前已有聚焦模型的 I/P/V、空气控制模式和低负荷代表性验证；四问题研究结论只适用于对应的聚焦边界，完整模型逐信号等价对照仍是独立门槛。六配置矩阵的统一状态和后续顺序见 `04_说明/RouteA_GasMixture_Derived/01_当前指导/RouteA_cEGR_PEMFC_两条主线与活动资产迁移规划_v01.md`。
+当前已有聚焦模型的 I/P/V、空气控制模式和低负荷代表性验证；相关结论只适用于对应的聚焦边界，完整模型逐信号等价对照仍是独立门槛。当前配置状态见根目录 `PROJECT.md`；V-MH、E-SH、P-SH 的具体施工步骤分别见按需读取的 `../../04_说明/聚焦模型执行计划/`。
